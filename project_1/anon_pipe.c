@@ -30,12 +30,13 @@ int main(int argc, const char *argv[]) {
 	printf("Enter a character: ");
     fgets(buffer, SIZE, stdin);
 
-    if (pipe(pipefd) < 0) {
-        printf("ERROR: Failed to open pipe\n");
-        exit(1);
-    }
 
     for (i = 0; i < 52; ++i) {
+
+        if (pipe(pipefd) < 0) {
+            printf("ERROR: Failed to open pipe\n");
+            exit(1);
+        }
 
         pid = fork();
         
@@ -47,15 +48,26 @@ int main(int argc, const char *argv[]) {
         if (pid == 0) {  
 
             getNextAlphabet(&buffer[0]);
+
+            //close the read end
             close(pipefd[0]);
-            write(pipefd[1], buffer, 1);
+            
             /* Write modified character to parent */
+            write(pipefd[1], buffer, 1);
+
+            //we're done so now close the write end
+            close(pipefd[0]);
             exit(0);
-        } else {  
+        } 
+        else {  
             int status = 0;
             waitpid(pid, &status, WUNTRACED);
+
             /* Print current character */
             printf("%c -> ", buffer[0]);
+
+            // close the write end
+            close(pipefd[1]);
 
             /* Read modified character from child */
             read(pipefd[0], buffer, 1);
