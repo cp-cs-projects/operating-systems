@@ -15,7 +15,7 @@
 
 struct shared_data
 {
-    char buffer[SIZE];
+    char message[10];
     int ready; /* Flag to indicate message is ready */
 };
 
@@ -34,9 +34,9 @@ void getNextAlphabet(char* alp) {
     free(next);
 }
 
-int main(int argc, const char *argv[])
+int main(void)
 {
-    int shm_id;
+    int shm_id, i;
     struct shared_data *shared_mem;
     pid_t child_pid;
 
@@ -57,44 +57,54 @@ int main(int argc, const char *argv[])
     }
 
     /* Initialize shared memory */
-    memset(shared_mem->buffer, 0, sizeof(shared_mem->buffer ));
+    memset(shared_mem->message, 0, sizeof(shared_mem->message));
     shared_mem->ready = 0;
 
-    /* Create child process */
-    child_pid = fork();
-    assert(child_pid >= 0);
+    printf("Enter a character: ");
+    fgets(shared_mem->message, SIZE, stdin);
+for(i = 0; i < 52; i++)
+{
+        /* Create child process */
+        child_pid = fork();
+        assert(child_pid >= 0);
 
-    if (child_pid == 0)
-    {
-        /* Child process */
+        if (child_pid == 0)
+        {
+            /* Child process */
+            while (!shared_mem->ready)//child waits for parent to get current letter
+                usleep(1000);
 
-        /* Child sends message */
-        strncpy(shared_mem->buffer, "h", sizeof(shared_mem->buffer));
-        printf("Child is sending: '%s'\n", shared_mem->buffer);
-        shared_mem->ready = 1; /* Signal that message is ready */
+            getNextAlphabet(&((shared_mem->message)[0]));
+            /* Child sends message */
+            shared_mem->ready = 1; /* Signal that message is ready */
 
-        /* Detach shared memory */
-        shmdt(shared_mem);
+            /* Detach shared memory */
+            shmdt(shared_mem);
+            exit(0);
+        }
 
-        exit(0);
+        /* Parent process */
+        printf("%c -> ", (shared_mem->message)[0]); //parent grabs current letter
+        shared_mem->ready = 1; // tells the child it can grab the next letter
+        int status = 0;
+        waitpid(child_pid, &status, WUNTRACED); // waits for child to send next letter
+
+        /* Wait for child's message */
+        while (!shared_mem->ready)
+            usleep(1000); /* Small delay to prevent busy waiting */
+
+
+        //printf("Parent received: '%s'\n", shared_mem->message);
+
+        printf("%c\n", (shared_mem->message)[0]);
+        /* Wait for child to complete */
+        wait(NULL);
+
+        //printf("Parent has received and printed the message\n");
+
+        /* Cleanup shared memory */
     }
-
-    /* Parent process */
-
-    /* Wait for child's message */
-    while (!shared_mem->ready)
-        usleep(1000); /* Small delay to prevent busy waiting */
-
-    printf("Parent received: '%s'\n", shared_mem->buffer);
-
-    /* Wait for child to complete */
-    wait(NULL);
-
-    printf("Parent has received and printed the message\n");
-
-    /* Cleanup shared memory */
     shmdt(shared_mem);
     shmctl(shm_id, IPC_RMID, NULL);
-
     return 0;
 }
