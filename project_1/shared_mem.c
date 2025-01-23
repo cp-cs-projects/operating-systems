@@ -11,14 +11,30 @@
 
 #define SHM_SIZE 1024
 #define SHM_KEY 12345
+#define SIZE 2
 
 struct shared_data
 {
-    char message[10];
+    char buffer[SIZE];
     int ready; /* Flag to indicate message is ready */
 };
 
-int main(void)
+void getNextAlphabet(char* alp) {
+    char *next = (char *)calloc(2, sizeof(char));
+    next[1] = '\0';
+    
+    if (*alp == 'Z')
+        next[0] = 'a';
+    else if (*alp == 'z')
+        next[0] = 'A';
+    else
+        next[0] = *alp + 1;
+        
+    *alp = *next;
+    free(next);
+}
+
+int main(int argc, const char *argv[])
 {
     int shm_id;
     struct shared_data *shared_mem;
@@ -41,7 +57,7 @@ int main(void)
     }
 
     /* Initialize shared memory */
-    memset(shared_mem->message, 0, sizeof(shared_mem->message));
+    memset(shared_mem->buffer, 0, sizeof(shared_mem->buffer ));
     shared_mem->ready = 0;
 
     /* Create child process */
@@ -53,8 +69,8 @@ int main(void)
         /* Child process */
 
         /* Child sends message */
-        strncpy(shared_mem->message, "hello", sizeof(shared_mem->message));
-        printf("Child is sending: '%s'\n", shared_mem->message);
+        strncpy(shared_mem->buffer, "h", sizeof(shared_mem->buffer));
+        printf("Child is sending: '%s'\n", shared_mem->buffer);
         shared_mem->ready = 1; /* Signal that message is ready */
 
         /* Detach shared memory */
@@ -69,7 +85,7 @@ int main(void)
     while (!shared_mem->ready)
         usleep(1000); /* Small delay to prevent busy waiting */
 
-    printf("Parent received: '%s'\n", shared_mem->message);
+    printf("Parent received: '%s'\n", shared_mem->buffer);
 
     /* Wait for child to complete */
     wait(NULL);

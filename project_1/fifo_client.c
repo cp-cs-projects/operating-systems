@@ -41,37 +41,10 @@ int main(int argc, const char *argv[])
     write(fifo, &buffer[0], 1); // write first char
     for (i = 0; i < 52; ++i)
     {
-
-        // pid = fork();
-
-        // if (pid == -1) {
-        //     perror("fork");
-        //     exit(1);
-        // }
-
-        // if (pid == 0) {
-        //     // in child
-
         /* Use the file name to open the FIFO for writing */
         getNextAlphabet(&buffer[0]);
         write(fifo, buffer, 1);
     }
-
-    // } else {
-    //     int status = 0;
-    //     waitpid(pid, &status, WUNTRACED);
-    //     // /* Print current character */
-    //     // printf("%c -> ", buffer[0]);
-
-    //     // /* Read modified character from child */
-    //     // read(pipefd[0], buffer, 1);
-
-    //     // /* Print new character */
-    //     // printf("%c\n", buffer[0]);
-
-    //     // Wait for child to fBinish
-    //     wait(NULL);
-    // }
 
     close(fifo);
     return 0;
