@@ -15,7 +15,9 @@ void schedule_rr(Task* head);
 Task* read_tasks_from_file(const char* filename);
 void parse_line(char* line, int* tid, int* priority, int* burst);
 
-/* Helper functions */
+/* useful to run more than one simulation on same task set */
 void reset_tasks(Task* head);
 
+// debugging
+void print_list(Task* head);
 #endif
