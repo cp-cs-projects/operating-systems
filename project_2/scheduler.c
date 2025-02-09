@@ -31,6 +31,7 @@ void parse_line(char* line, int* tid, int* priority, int* burst) {
 /* process in order of list */
 void schedule_fcfs(Task* head)
 {
+    printf("Scheduling with FCFS\n");
     int time = 0;
     // int arrival = 0;
 
@@ -47,8 +48,6 @@ void schedule_fcfs(Task* head)
 
         curr = curr->next;
     }
-
-    printf("fcfs\n");
 }
 
 void schedule_sjf(Task* head)
