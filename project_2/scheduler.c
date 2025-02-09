@@ -109,9 +109,14 @@ void print_list(Task* head) {
     Task *curr = head;
     while (curr != NULL) {
         printf("Task ID: %d\n", curr->tid);
-        printf("Priority: %d\n", curr->priority);
-        printf("Burst: %d\n", curr->burst);
-        printf("-----------------\n");
+        printf("  Priority: %d\n", curr->priority);
+        printf("  Burst: %d\n", curr->burst);
+        printf("  Original Burst: %d\n", curr->original_burst);
+        printf("  Waiting Time: %d\n", curr->waiting_time);
+        printf("  Turnaround Time: %d\n", curr->turnaround_time);
+        printf("  Response Time: %d\n", curr->response_time);
+        printf("  Completed: %s\n", curr->completed ? "Yes" : "No");
+        printf("-------------------------\n");
         curr = curr->next;
     }
 }
