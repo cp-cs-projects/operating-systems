@@ -22,7 +22,7 @@ void parse_line(char* line, int* tid, int* priority, int* burst) {
     *burst = atoi(token);
 }
 
-Task* findmax(Task* head, int lastmax)
+Task* findMaxBurst(Task* head, int lastmax)
 {
     Task* curr = head;
     Task* max = NULL;
@@ -44,9 +44,54 @@ Task* sortSJF(Task* head)
     Task* max = NULL;
     while(1)
     {
-        max = findmax(head, lastmax);
+        max = findMaxBurst(head, lastmax);
         if(max == NULL){break;}
         lastmax = max->burst;
+
+        if(head == max)
+        {
+            head = head->next;
+        }
+        else
+        {
+            Task* prev = head;
+            while(prev->next != max)
+            {
+                prev = prev->next;
+            }
+            prev->next = max->next;
+        }
+        max->next = sorted;
+        sorted = max;
+    }
+    return sorted;
+}
+
+Task* findMaxPriority(Task* head, int lastmax)
+{
+    Task* curr = head;
+    Task* max = NULL;
+    while(curr != NULL)
+    {
+        if((max != NULL && curr->priority < lastmax && curr->priority> max->priority) || (max == NULL && curr->priority < lastmax))
+        {
+            max = curr;
+        }
+        curr = curr->next;
+    }
+    return max;
+}
+
+Task* sortPriority(Task* head)
+{
+    int lastmax = 1000;
+    Task* sorted = NULL;
+    Task* max = NULL;
+    while(1)
+    {
+        max = findMaxPriority(head, lastmax);
+        if(max == NULL){break;}
+        lastmax = max->priority;
 
         if(head == max)
         {
@@ -116,9 +161,26 @@ Task* schedule_sjf(Task* head)
     return sortedHead;
 }
 
-void schedule_priority(Task* head)
+Task* schedule_priority(Task* head)
 {
-    printf("priority\n");
+    printf("Scheduling with Strict Priority\n");
+    Task *sortedHead = sortPriority(head);
+    Task* curr = sortedHead;
+    int time = 0;
+
+    while(curr != NULL)
+    {
+        curr->response_time = time;
+        curr->waiting_time = time;
+        run(curr, curr->burst);
+
+        time = time + curr->burst;
+        curr->turnaround_time = time;
+        curr-> completed = 1;
+
+        curr = curr->next;
+    }
+    return sortedHead;
 }
 
 void schedule_rr(Task* head)

@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
         tasks = schedule_sjf(tasks);
         break;
     case 3:
-        schedule_priority(tasks);
+        tasks = schedule_priority(tasks);
         break;
     case 4:
         schedule_rr(tasks);

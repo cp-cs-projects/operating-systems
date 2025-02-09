@@ -8,7 +8,7 @@
 /* Core scheduling algorithms */
 void schedule_fcfs(Task* head);
 Task* schedule_sjf(Task* head);
-void schedule_priority(Task* head);
+Task* schedule_priority(Task* head);
 void schedule_rr(Task* head);
 
 /* File input functions */
