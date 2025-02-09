@@ -22,10 +22,31 @@ void parse_line(char* line, int* tid, int* priority, int* burst) {
     *burst = atoi(token);
 }
 
+
+/*
+ * response time: Tfirstrun - Tarrival(=0)
+ * TAT: Tcompleted - Tarrival
+ * wait time: TAT - Tburst
+ */
 /* process in order of list */
 void schedule_fcfs(Task* head)
 {
     int time = 0;
+    // int arrival = 0;
+
+    Task *curr = head;
+
+    while (curr != NULL) {
+        curr->response_time = time;
+        curr->waiting_time = time;
+        run(curr, curr->burst);
+
+        time = time + curr->burst;
+        curr->turnaround_time = time;
+        curr->completed = 1;
+
+        curr = curr->next;
+    }
 
     printf("fcfs\n");
 }
@@ -115,7 +136,7 @@ void print_list(Task* head) {
         printf("  Waiting Time: %d\n", curr->waiting_time);
         printf("  Turnaround Time: %d\n", curr->turnaround_time);
         printf("  Response Time: %d\n", curr->response_time);
-        printf("  Completed: %s\n", curr->completed ? "Yes" : "No");
+        printf("  Completed: %d\n", curr->completed);
         printf("-------------------------\n");
         curr = curr->next;
     }
