@@ -17,7 +17,7 @@ struct task {
     int completed;        /* Completion flag */
     struct task *next;    /* Next task in list */
 };
-
+ 
 typedef struct task Task;
 
 /* Task management functions */

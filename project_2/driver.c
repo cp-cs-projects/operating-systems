@@ -20,7 +20,7 @@ int main(int argc, char *argv[]) {
         printf("Algorithms: 1=FCFS, 2=SJF, 3=Priority, 4=RR\n");
         return 1;
     }
-
+ 
     Task* tasks = read_tasks_from_file(argv[1]);
     // print_list(tasks);
     
@@ -30,7 +30,7 @@ int main(int argc, char *argv[]) {
         schedule_fcfs(tasks);
         break;
     case 2:
-        schedule_sjf(tasks);
+        tasks = schedule_sjf(tasks);
         break;
     case 3:
         schedule_priority(tasks);

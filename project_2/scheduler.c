@@ -22,6 +22,50 @@ void parse_line(char* line, int* tid, int* priority, int* burst) {
     *burst = atoi(token);
 }
 
+Task* findmax(Task* head, int lastmax)
+{
+    Task* curr = head;
+    Task* max = NULL;
+    while(curr != NULL)
+    {
+        if((max != NULL && curr->burst < lastmax && curr->burst > max->burst) || (max == NULL && curr->burst < lastmax))
+        {
+            max = curr;
+        }
+        curr = curr->next;
+    }
+    return max;
+}
+
+Task* sortSJF(Task* head)
+{
+    int lastmax = 1000;
+    Task* sorted = NULL;
+    Task* max = NULL;
+    while(1)
+    {
+        max = findmax(head, lastmax);
+        if(max == NULL){break;}
+        lastmax = max->burst;
+
+        if(head == max)
+        {
+            head = head->next;
+        }
+        else
+        {
+            Task* prev = head;
+            while(prev->next != max)
+            {
+                prev = prev->next;
+            }
+            prev->next = max->next;
+        }
+        max->next = sorted;
+        sorted = max;
+    }
+    return sorted;
+}
 
 /*
  * response time: Tfirstrun - Tarrival(=0)
@@ -50,9 +94,26 @@ void schedule_fcfs(Task* head)
     }
 }
 
-void schedule_sjf(Task* head)
+Task* schedule_sjf(Task* head)
 {
-    printf("sjf\n");
+    printf("Scheduling with SJF\n");
+    Task *sortedHead = sortSJF(head);
+    Task* curr = sortedHead;
+    int time = 0;
+
+    while(curr != NULL)
+    {
+        curr->response_time = time;
+        curr->waiting_time = time;
+        run(curr, curr->burst);
+
+        time = time + curr->burst;
+        curr->turnaround_time = time;
+        curr-> completed = 1;
+
+        curr = curr->next;
+    }
+    return sortedHead;
 }
 
 void schedule_priority(Task* head)
@@ -124,7 +185,7 @@ Task* read_tasks_from_file(const char* filename)
 }
 
 void reset_tasks(Task* head);
-
+ 
 void print_list(Task* head) {
     Task *curr = head;
     while (curr != NULL) {
