@@ -185,6 +185,27 @@ Task* schedule_priority(Task* head)
 
 void schedule_rr(Task* head)
 {
+
+    /*
+    1. implement queue (array?), queue processes
+    2. until queue empty,
+        a. pop front of queue
+        b. if remaining burst > time
+            i. run(10), time+= 10, burst -= 10, requeue
+           else: run(burst), time += burst, burst = 0, completed = 1
+    */
+    Task* curr = head;
+
+    Queue q;
+    q.front = -1;
+    q.back = 0;
+
+    while (curr != NULL) 
+    {
+        enqueue(&q, curr);
+        curr = curr->next;
+    }
+    printQueue(&q);
     printf("round robin\n");
 }
 

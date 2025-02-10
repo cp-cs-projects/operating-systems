@@ -2,6 +2,7 @@
 #define SCHEDULER_H
 
 #include "task.h"
+#include "queue.h"
 
 #define TIME_QUANTUM 10
 
@@ -20,4 +21,7 @@ void reset_tasks(Task* head);
 
 // debugging
 void print_list(Task* head);
+
+// Queue struct
+
 #endif
