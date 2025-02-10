@@ -2,8 +2,7 @@
 #include <stdio.h>
 #include "queue.h"
 
-
-bool isEmpty(Queue* q) { return (q->front == q->back - 1); }
+int isEmpty(Queue* q) { return (q->front == q->back); }
 
 void enqueue(Queue* q, Task* t)
 {
@@ -23,10 +22,11 @@ void dequeue(Queue* q)
 // Function to print the current queue
 void printQueue(Queue* q)
 {
+    int i;
     printf("QUEUE: ");
-    for (int i = q->front + 1; i < q->back; i++) {
+    for (i = q->front + 1; i < q->back; i++) {
         Task* task = q->items[i]; // Access Task pointer
-        printf("[Id: %d, Priority: %d, Burst: %d] ", task->tid, task->priority, task->burst);
+        printf("\n[Id: %d, Priority: %d, Burst: %d]", task->tid, task->priority, task->burst);
     }
     printf("\n");
 }

@@ -4,6 +4,7 @@
 #include "scheduler.h"
 #include "cpu.h"
 #include "task.h"
+#include "queue.h"
 
 void parse_line(char* line, int* tid, int* priority, int* burst) {
     char* token;
@@ -185,7 +186,6 @@ Task* schedule_priority(Task* head)
 
 void schedule_rr(Task* head)
 {
-
     /*
     1. implement queue (array?), queue processes
     2. until queue empty,
@@ -195,18 +195,50 @@ void schedule_rr(Task* head)
            else: run(burst), time += burst, burst = 0, completed = 1
     */
     Task* curr = head;
-
+    Task* front;
     Queue q;
-    q.front = -1;
+    q.front = 0;
     q.back = 0;
+    int time = 0;
+
+    printf("Scheduling with Round Robin\n");
 
     while (curr != NULL) 
     {
         enqueue(&q, curr);
         curr = curr->next;
     }
-    printQueue(&q);
-    printf("round robin\n");
+    //printQueue(&q);
+
+    while(!(isEmpty(&q)))
+    {
+        front = q.items[q.front];
+        //printf("BURST TIME: %d, TASK ID: %d, FRONT: %d, BACK: %d\n", front->burst, front->tid, q.front, q.back);
+        dequeue(&q);
+        if(front->response_time == -1)
+        {
+            front->response_time = time;
+        }
+        if(front->burst > TIME_QUANTUM)
+        {
+            run(front, TIME_QUANTUM);
+            front->burst -= TIME_QUANTUM;
+            time += TIME_QUANTUM;
+            //front->waiting_time += time;
+            enqueue(&q, front);
+        }
+        else if (front->completed == 0)
+        {
+            //front->waiting_time += time;
+            run(front, front->burst);
+            time += front->burst;
+            front->burst -= front->burst;
+            front->waiting_time = time;
+            front->turnaround_time = time;
+            front->waiting_time -= front->original_burst;
+            front->completed = 1;
+        }
+    }
 }
 
 Task* create_task(int id, int burst, int priority)
@@ -220,7 +252,7 @@ Task* create_task(int id, int burst, int priority)
     t->original_burst = burst; // storing original burst to use later
     t->waiting_time = 0;
     t->turnaround_time = 0; // IDRK what this should be yet to start...
-    t->response_time = 0; // maybe a -1 to indicate it hasn't had a chance to run yet
+    t->response_time = -1; // maybe a -1 to indicate it hasn't had a chance to run yet
     t->completed = 0; //not completed
     t->next = NULL;
     

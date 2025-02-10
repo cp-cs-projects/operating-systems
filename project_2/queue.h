@@ -15,4 +15,6 @@ void dequeue(Queue* q);
 
 void printQueue(Queue* q);
 
+int isEmpty(Queue* q);
+
 #endif
