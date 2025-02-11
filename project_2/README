@@ -5,9 +5,15 @@
 3. `./scheduler schedule.txt <ALGO NUMBER>`
 
 ## Things we want you to know:
+- For sorting the tasks (singly linked list) for SJF and SP, we changed the original return types of the scheduling 
+  functions to return a new sorted task list. We removed a task one at a time from the original task list and added to the sorted list.
+  Therefore, the print task stats function now prints them in the order they were run rather than in order of TID.
 - Our implementation is a bit reliant on the fact that each task arrives at time 0.
 - Our round robin queue implementation is reliant on the number of tasks not being big or burst time being too long.
 - you said those ^ dependancies are fine, we just wanted to outline them here!
 
 ## What happens to response time with RR as quantum lengths increase? 
-- As time quantum lengths increase...
+- As time quantum lengths increase, the response time will also increase until the quantum length is >= the largest burst time. 
+  Once quantum length >= largest burst time, the response time will converge at the response time for whichever algorithm you use
+  to break ties (in our case FCFS). For our tasks in schedule.txt, once the time quantum is >= 40, the response time is equal to 
+  the response time for the FCFS algorithm.
