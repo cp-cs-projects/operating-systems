@@ -1,1 +1,13 @@
 # Naomi Nayman and Sri Bala
+## Instructions:
+1. `make clean` 
+2. `make`
+3. `./scheduler schedule.txt <ALGO NUMBER>`
+
+## Things we want you to know:
+- Our implementation is a bit reliant on the fact that each task arrives at time 0.
+- Our round robin queue implementation is reliant on the number of tasks not being big or burst time being too long.
+- you said those ^ dependancies are fine, we just wanted to outline them here!
+
+## What happens to response time with RR as quantum lengths increase? 
+- As time quantum lengths increase...
