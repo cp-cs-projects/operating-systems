@@ -28,6 +28,19 @@ def main(argc, argv):
     except FileNotFoundError:
         print("Reference sequence file not found")
         return 1
+    
+    # read the input file
+    reference_sequence = []
+    for line in reference_file:
+        reference_sequence.append(int(line.strip()))
+    reference_file.close()
+
+    tlb = TLB.tlb()
+    # TODO: need to intialize and populate the page table
+    # TODO: need to intialize and populate the backing store
+
+        
+
 
     return 0
 
