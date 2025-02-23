@@ -6,6 +6,7 @@ import backing_store
 import sys
 
 # ./memSim.py <reference-sequence-file.txt> <FRAMES> <PRA>
+# Q: default algs, only 2 args needed?
 def main(argc, argv):
     # Check if the number of arguments is correct
     if argc != 4:
@@ -29,13 +30,21 @@ def main(argc, argv):
         print("Reference sequence file not found")
         return 1
     
-    # read the input file
+    # 1. read the input file, extract addr, page_num, offset
     reference_sequence = []
     for line in reference_file:
         reference_sequence.append(int(line.strip()))
     reference_file.close()
 
+    # 2. look up the page in the TLB
+
     tlb = TLB.tlb()
+
+    # 3. on miss, check page table
+
+    # 4. on page miss, page fault. read page from backing store, use pra to choose frame if no free exists, update page table & TLB
+    
+    # 5. compute physical addr and read byte from main memory.
     # TODO: need to intialize and populate the page table
     # TODO: need to intialize and populate the backing store
 

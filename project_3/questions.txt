@@ -1,0 +1,2 @@
+1. backing store..what does it mean by not the one you are graded on, can we assume to populate with backing_store.bin
+2. default fifo/256, assume no arguments can be passed?
