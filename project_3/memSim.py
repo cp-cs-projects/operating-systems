@@ -1,13 +1,10 @@
 #!/usr/local/bin/python3
-import TLB
-import main_memory
-import page_table
-import backing_store
+from main_memory import memory
+from backing_store import BackingStore
 import sys
 
 
 # ./memSim.py <reference-sequence-file.txt> <FRAMES> <PRA>
-# Q: default algs, only 2 args needed?
 def main(argc, argv):
     # Check if the number of arguments is correct
     if argc != 4:
@@ -31,34 +28,38 @@ def main(argc, argv):
         print("Reference sequence file not found")
         return 1
     
-    bs = backing_store.BackingStore()
-    mem = main_memory.memory(frames, bs.store, pra)
+    bs = BackingStore()
+    mem = memory(frames, bs, pra)
+
     # 1. read the input file, extract addr, page_num, offset
-    reference_sequence = []
+    num_addresses = 0
     for line in reference_file:
         address = int(line.strip())
         page_num = address >> 8
         offset = address & 0xFF
-        reference_sequence.append([address, page_num, offset])
+
+        # get signed int byte from physicaly memory
+        frame_number = mem.get_page(page_num)
+        byte = mem.memory[frame_number][offset]
+        signed_byte = byte - 256 if byte > 127 else byte
+        
+        hex_data = bs.byte_array_to_hex_ascii(mem.memory[frame_number])
+        print(f"{address}, {signed_byte}, {frame_number}, {hex_data}")
+        num_addresses += 1
+        #reference_sequence.append([address, page_num, offset])
         # print(f"Address: {address}, Page Number: {page_num}, Offset: {offset}")
     reference_file.close()
 
-    for address, page_num, _ in reference_sequence:
-        frame_number = mem.get_page(page_num)
-        print(f'{address}, {frame_number}, {bs.print_data(page_num)}\n')
+    # for address, page_num, _ in reference_sequence:
+    #     frame_number = mem.get_page(page_num)
+    #     print(f'{address}, {frame_number}, {bs.print_data(page_num)}\n')
 
-    print(f'Number of Translated Addresses = {len(reference_sequence)}')
-    print(f"Page Faults: {mem.faults}")
-    print(f"Page Fault Rate: {mem.faults/len(reference_sequence)}")
-    print(f"TLB Hits: {mem.tlb_hits}")
-    print(f"TLB Misses: {mem.tlb_misses}")
-    print(f"TLB Hit Rate: {mem.tlb_hits/(mem.tlb_hits + mem.tlb_misses)}")
-
-
-
-        
-
-
+    print(f'Number of Translated Addresses = {num_addresses}')
+    print(f"Page Faults = {mem.faults}")
+    print(f"Page Fault Rate = {mem.faults/num_addresses:.3f}")
+    print(f"TLB Hits = {mem.tlb_hits}")
+    print(f"TLB Misses = {mem.tlb_misses}")
+    print(f"TLB Hit Rate = {mem.tlb_hits/(mem.tlb_hits + mem.tlb_misses):.3f}")
     return 0
 
 if __name__ == "__main__":

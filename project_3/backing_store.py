@@ -31,4 +31,4 @@ class BackingStore:
 
 
     def byte_array_to_hex_ascii(self, byte_array): # got this from google
-        return ''.join([f'{byte:02x}' for byte in byte_array])  
+        return byte_array.hex().upper()

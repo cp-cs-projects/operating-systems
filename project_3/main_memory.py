@@ -4,11 +4,9 @@ class memory:
     def __init__(self, size, store, PRA):
         self.size = size
         self.memory = [None] * size
-        self.page_table = {}
-        # page table entries will be {k, v} 
-        # where k is the page number and v is [frame number, reference bit, valid bit]
+        self.page_table = {} # {page_number: [frame_number, valid_bit, reference_bit]}
         self.tlb = OrderedDict()
-        self.insert_order = deque() # may need this for FIFO
+        self.insert_order = deque()
         self.last_used = {}
         self.faults = 0
         self.hits = 0
@@ -24,45 +22,64 @@ class memory:
         if frame_number is not None:
             self.tlb_hits += 1
             # we may need to add a valid bit to the TLB
-            self.page_table[page_number][2] = 1 # update the reference bit?????
-            return frame_number
-        
+            # self.page_table[page_number][2] = 1 
+            return frame_number 
         else:
             self.tlb_misses += 1
-        # if not, check if page is already in memory
-        if page_number in self.page_table:
-            # check if page is valid       
-            if self.page_table[page_number][1] == 1: # if the page is valid
+
+        # if not, check if page is already in memory and is valid
+        if page_number in self.page_table and self.page_table[page_number][1] == 1:     
                 self.hits += 1
-                self.page_table[page_number][2] = 1 # update the reference bit
+                frame_number = self.page_table[page_number][0]
+                #self.page_table[page_number][2] = 1 # update the reference bit
                 # update the TLB
-                self.add_tlb(page_number, self.page_table[page_number][0])
-                return self.page_table[page_number][0] # return the frame number
+                self.add_tlb(page_number, frame_number)
+                return frame_number
         else: # page fault
             # check if there is a free frame
             self.faults += 1
-            for i in range(self.size):
-                if self.memory[i] is None:
-                    self.memory[i] = page_number
-                    self.page_table[page_number] = [i, 1, 1] # frame number, reference bit, valid bit
-                    self.add_tlb(page_number, i)
-                    return i
+            frame_number = self.page_fault(page_number)
+            return frame_number
+            
+    
+    def page_fault(self, page_number):
+        # finding free frame
+        for frame_number in range(self.size):
+            if self.memory[frame_number] is None:
+                return self.load_from_bs(page_number, frame_number)
+        
             # this will only hit when all frames are full
             # now we need to deal with PRA
-            if self.pra == "FIFO":
-                return self.fifo(page_number)
-            elif self.pra == "LRU":
-                return self.lru(page_number)
-            else:
-                return self.opt(page_number)
-            
-    # TODO: implement the PRA functions
+        if self.pra == "FIFO":
+            return self.fifo(page_number)
+        elif self.pra == "LRU":
+            return self.lru(page_number)
+        else:
+            return self.opt(page_number)
+    
+    def load_from_bs(self, page_number, frame_number):
+        data = self.store.read_page(page_number)
+        self.memory[frame_number] = data
+        self.page_table[page_number] = [frame_number, 1, 0]
+        self.insert_order.append(page_number)
+        self.add_tlb(page_number, frame_number)
+        return frame_number
+    
     def fifo(self, page_number):
         # remove the oldest page
-        # update the page table
-        # add the new page
-        # update the TLB
+        oldest = self.insert_order.popleft()
+        frame_number = self.page_table[oldest][0]
         
+        # update the page table
+        self.page_table[oldest][1] = 0
+
+        if oldest in self.tlb:
+            del self.tlb[oldest]
+        
+        # add the new page and update tlb
+        frame_number = self.load_from_bs(page_number, frame_number)
+        return frame_number
+
 
     def lru(self, page_number):
         return 0
