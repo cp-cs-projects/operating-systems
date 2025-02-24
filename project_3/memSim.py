@@ -5,6 +5,7 @@ import page_table
 import backing_store
 import sys
 
+
 # ./memSim.py <reference-sequence-file.txt> <FRAMES> <PRA>
 # Q: default algs, only 2 args needed?
 def main(argc, argv):
@@ -30,6 +31,8 @@ def main(argc, argv):
         print("Reference sequence file not found")
         return 1
     
+    bs = backing_store.BackingStore()
+    mem = main_memory.memory(frames, bs.store)
     # 1. read the input file, extract addr, page_num, offset
     reference_sequence = []
     for line in reference_file:
@@ -37,8 +40,6 @@ def main(argc, argv):
     reference_file.close()
 
     # 2. look up the page in the TLB
-
-    tlb = TLB.tlb()
 
     # 3. on miss, check page table
 
