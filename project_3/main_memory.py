@@ -24,7 +24,6 @@ class memory:
         frame_number = self.tlb_lookup(page_number)
         if frame_number is not None:
             self.tlb_hits += 1
-            # we may need to add a valid bit to the TLB
             if (self.pra == "LRU"):
                 self.insert_order.remove(page_number)
                 self.insert_order.append(page_number)

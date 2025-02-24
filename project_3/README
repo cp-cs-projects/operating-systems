@@ -1,0 +1,3 @@
+## To run: run `./memSim <reference-sequence-file.txt> <FRAMES> <PRA>` with any command line args you need. 
+
+### You may need to change the shebang to point to wherever python lives on your machine
