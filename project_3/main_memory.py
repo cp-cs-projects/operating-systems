@@ -31,7 +31,7 @@ class memory:
             self.tlb_misses += 1
         # if not, check if page is already in memory
         if page_number in self.page_table:
-            # check if page is valid
+            # check if page is valid       
             if self.page_table[page_number][1] == 1: # if the page is valid
                 self.hits += 1
                 self.page_table[page_number][2] = 1 # update the reference bit
@@ -44,7 +44,8 @@ class memory:
             for i in range(self.size):
                 if self.memory[i] is None:
                     self.memory[i] = page_number
-                    self.page_table[page_number] = i
+                    self.page_table[page_number] = [i, 1, 1] # frame number, reference bit, valid bit
+                    self.add_tlb(page_number, i)
                     return i
             # this will only hit when all frames are full
             # now we need to deal with PRA
@@ -57,7 +58,11 @@ class memory:
             
     # TODO: implement the PRA functions
     def fifo(self, page_number):
-        return 0
+        # remove the oldest page
+        # update the page table
+        # add the new page
+        # update the TLB
+        
 
     def lru(self, page_number):
         return 0
