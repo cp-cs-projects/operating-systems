@@ -5,7 +5,7 @@ class BackingStore:
     
     def read_page(self, page_number): 
         # read 256 byte page from the backing store
-        start = page_number
+        start = page_number * 256 # convert back to actual index in array
         end = start + 256
         return self.store[start:end]
 
@@ -23,7 +23,12 @@ class BackingStore:
                 i += 1
                 
             return store   
+        
+    def print_data(self, page_number):
+        page = self.read_page(page_number)
+        hex_data = self.byte_array_to_hex_ascii(page)
+        return hex_data
 
 
-    def byte_array_to_hex_ascii(self, byte_array):
+    def byte_array_to_hex_ascii(self, byte_array): # got this from google
         return ''.join([f'{byte:02x}' for byte in byte_array])  

@@ -32,22 +32,29 @@ def main(argc, argv):
         return 1
     
     bs = backing_store.BackingStore()
-    mem = main_memory.memory(frames, bs.store)
+    mem = main_memory.memory(frames, bs.store, pra)
     # 1. read the input file, extract addr, page_num, offset
     reference_sequence = []
     for line in reference_file:
-        reference_sequence.append(int(line.strip()))
+        address = int(line.strip())
+        page_num = address >> 8
+        offset = address & 0xFF
+        reference_sequence.append([address, page_num, offset])
+        # print(f"Address: {address}, Page Number: {page_num}, Offset: {offset}")
     reference_file.close()
 
-    # 2. look up the page in the TLB
+    for address, page_num, _ in reference_sequence:
+        frame_number = mem.get_page(page_num)
+        print(f'{address}, {frame_number}, {bs.print_data(page_num)}\n')
 
-    # 3. on miss, check page table
+    print(f'Number of Translated Addresses = {len(reference_sequence)}')
+    print(f"Page Faults: {mem.faults}")
+    print(f"Page Fault Rate: {mem.faults/len(reference_sequence)}")
+    print(f"TLB Hits: {mem.tlb_hits}")
+    print(f"TLB Misses: {mem.tlb_misses}")
+    print(f"TLB Hit Rate: {mem.tlb_hits/(mem.tlb_hits + mem.tlb_misses)}")
 
-    # 4. on page miss, page fault. read page from backing store, use pra to choose frame if no free exists, update page table & TLB
-    
-    # 5. compute physical addr and read byte from main memory.
-    # TODO: need to intialize and populate the page table
-    # TODO: need to intialize and populate the backing store
+
 
         
 
