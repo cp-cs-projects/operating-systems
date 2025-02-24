@@ -25,7 +25,10 @@ class memory:
         if frame_number is not None:
             self.tlb_hits += 1
             # we may need to add a valid bit to the TLB
-            # self.page_table[page_number][2] = 1 
+            if (self.pra == "LRU"):
+                self.insert_order.remove(page_number)
+                self.insert_order.append(page_number)
+
             return frame_number 
         else:
             self.tlb_misses += 1
@@ -36,6 +39,10 @@ class memory:
                 frame_number = self.page_table[page_number][0]
                 # update the TLB
                 self.add_tlb(page_number, frame_number)
+                if (self.pra == "LRU"):
+                    self.insert_order.remove(page_number)
+                    self.insert_order.append(page_number)
+
                 return frame_number
         else: # page fault
             # check if there is a free frame
@@ -49,7 +56,6 @@ class memory:
         for frame_number in range(self.size):
             if self.memory[frame_number] is None:
                 return self.load_from_bs(page_number, frame_number)
-        
             # this will only hit when all frames are full
             # now we need to deal with PRA
         if self.pra == "FIFO":
@@ -84,7 +90,19 @@ class memory:
 
 
     def lru(self, page_number):
-        return 0
+        # remove the oldest page
+        oldest = self.insert_order.popleft()
+        frame_number = self.page_table[oldest][0]
+        
+        # update the page table
+        self.page_table[oldest][1] = 0
+
+        if oldest in self.tlb:
+            del self.tlb[oldest]
+        
+        # add the new page and update tlb
+        frame_number = self.load_from_bs(page_number, frame_number)
+        return frame_number
     
     def opt(self, page_number):
         return 0
@@ -99,7 +117,6 @@ class memory:
     def tlb_lookup(self, page_number):
         if page_number in self.tlb:
             frame_number = self.tlb[page_number]
-            # maybe update a reference bit here
             return frame_number
         else:
             return None
