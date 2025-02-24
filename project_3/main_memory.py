@@ -1,5 +1,8 @@
 from collections import deque, OrderedDict
 
+# Constants
+TLB_SIZE = 16
+
 class memory:
     def __init__(self, size, store, PRA):
         self.size = size
@@ -31,7 +34,6 @@ class memory:
         if page_number in self.page_table and self.page_table[page_number][1] == 1:     
                 self.hits += 1
                 frame_number = self.page_table[page_number][0]
-                #self.page_table[page_number][2] = 1 # update the reference bit
                 # update the TLB
                 self.add_tlb(page_number, frame_number)
                 return frame_number
@@ -90,7 +92,7 @@ class memory:
     ### TLB specific functions
 
     def add_tlb(self, page_number, frame_number):
-        if len(self.tlb) >= 16:
+        if len(self.tlb) >= TLB_SIZE:
             self.tlb.popitem(last=False) # FIFO
         self.tlb[page_number] = frame_number
 
