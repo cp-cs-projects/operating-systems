@@ -9,3 +9,4 @@ Our backing store class is built off of the assumption that there is a provided 
 
 if you want to change the TLB size then you can modify the TLB_SIZE constant at the top of the main_memory.py file
 
+our page table caps at the size of the backing store
