@@ -31,14 +31,27 @@ def main(argc, argv):
     bs = BackingStore()
     mem = memory(frames, bs, pra)
 
-    # 1. read the input file, extract addr, page_num, offset
+    # read the input file, extract addr, page_num, offset
     num_addresses = 0
+    if pra == "OPT": # building list of future references 
+        c = 0
+        for line in reference_file:
+            address = int(line.strip())
+            page_num = address >> 8
+            if page_num not in mem.page_refs:
+                mem.page_refs[page_num] = [c]
+            else:
+                mem.page_refs[page_num].append(c)
+            c+=1   
+        reference_file.seek(0)
+    
     for line in reference_file:
         address = int(line.strip())
         page_num = address >> 8
         offset = address & 0xFF
 
-        # get signed int byte from physicaly memory
+
+        # get signed int byte from physical memory
         frame_number = mem.get_page(page_num)
         byte = mem.memory[frame_number][offset]
         signed_byte = byte - 256 if byte > 127 else byte
@@ -46,13 +59,10 @@ def main(argc, argv):
         hex_data = bs.byte_array_to_hex_ascii(mem.memory[frame_number])
         print(f"{address}, {signed_byte}, {frame_number}, {hex_data}")
         num_addresses += 1
-        #reference_sequence.append([address, page_num, offset])
-        # print(f"Address: {address}, Page Number: {page_num}, Offset: {offset}")
-    reference_file.close()
+        #print(mem.page_refs)
+        
 
-    # for address, page_num, _ in reference_sequence:
-    #     frame_number = mem.get_page(page_num)
-    #     print(f'{address}, {frame_number}, {bs.print_data(page_num)}\n')
+    reference_file.close()
 
     print(f'Number of Translated Addresses = {num_addresses}')
     print(f"Page Faults = {mem.faults}")

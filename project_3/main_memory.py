@@ -7,10 +7,10 @@ class memory:
     def __init__(self, size, store, PRA):
         self.size = size
         self.memory = [None] * size
-        self.page_table = {} # {page_number: [frame_number, valid_bit, reference_bit]}
+        self.page_table = {} # {page_number: [frame_number, valid_bit]}
         self.tlb = OrderedDict()
         self.insert_order = deque()
-        self.last_used = {}
+        self.page_refs = {}
         self.faults = 0
         self.hits = 0
         self.tlb_hits = 0
@@ -20,6 +20,9 @@ class memory:
 
 
     def get_page(self, page_number):
+        self.page_refs[page_number].pop(0)
+        if len(self.page_refs[page_number]) == 0:
+            self.page_refs[page_number].append(float('inf')) # if no more references, set to infinity
         # check if page is in TLB
         frame_number = self.tlb_lookup(page_number)
         if frame_number is not None:
@@ -27,7 +30,6 @@ class memory:
             if (self.pra == "LRU"):
                 self.insert_order.remove(page_number)
                 self.insert_order.append(page_number)
-
             return frame_number 
         else:
             self.tlb_misses += 1
@@ -57,43 +59,25 @@ class memory:
                 return self.load_from_bs(page_number, frame_number)
             # this will only hit when all frames are full
             # now we need to deal with PRA
-        if self.pra == "FIFO":
-            return self.fifo(page_number)
-        elif self.pra == "LRU":
-            return self.lru(page_number)
+        if self.pra == "FIFO" or self.pra == "LRU":
+            return self.evict_victim(page_number)
         else:
-            return self.opt(page_number)
+            return self.evict_victim_opt(page_number)
     
     def load_from_bs(self, page_number, frame_number):
         data = self.store.read_page(page_number)
         self.memory[frame_number] = data
-        self.page_table[page_number] = [frame_number, 1, 0]
+        self.page_table[page_number] = [frame_number, 1]
         self.insert_order.append(page_number)
         self.add_tlb(page_number, frame_number)
         return frame_number
     
-    def fifo(self, page_number):
+    def evict_victim(self, page_number):
         # remove the oldest page
         oldest = self.insert_order.popleft()
         frame_number = self.page_table[oldest][0]
         
-        # update the page table
-        self.page_table[oldest][1] = 0
-
-        if oldest in self.tlb:
-            del self.tlb[oldest]
-        
-        # add the new page and update tlb
-        frame_number = self.load_from_bs(page_number, frame_number)
-        return frame_number
-
-
-    def lru(self, page_number):
-        # remove the oldest page
-        oldest = self.insert_order.popleft()
-        frame_number = self.page_table[oldest][0]
-        
-        # update the page table
+        # update the page table to invalidate evicted page, remove from tlb
         self.page_table[oldest][1] = 0
 
         if oldest in self.tlb:
@@ -103,8 +87,25 @@ class memory:
         frame_number = self.load_from_bs(page_number, frame_number)
         return frame_number
     
-    def opt(self, page_number):
-        return 0
+    def evict_victim_opt(self, page_number):
+        # find page accessed furthest in the future
+        future_refs = {}
+        for page in self.page_table:
+            if self.page_table[page][1] == 1: # in frame
+                future_refs[page] = self.page_refs[page][0]
+
+        furthest = max(future_refs, key=lambda k: future_refs[k])
+        frame_number = self.page_table[furthest][0]
+        
+        # update the page table
+        self.page_table[furthest][1] = 0
+
+        if furthest in self.tlb:
+            del self.tlb[furthest]
+        
+        # add the new page and update tlb
+        frame_number = self.load_from_bs(page_number, frame_number)
+        return frame_number
 
     ### TLB specific functions
 
