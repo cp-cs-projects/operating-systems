@@ -1,8 +1,11 @@
+Sri Bala, Naomi Nayman
+
 ## To run: run `./memSim <reference-sequence-file.txt> <FRAMES> <PRA>` with any command line args you need. 
 
 ### You may need to change the shebang to point to wherever python lives on your machine
 
 ## notes
-Sri Bala, Naomi Nayman
 Our backing store class is built off of the assumption that there is a provided file with the name BACKING_STORE.bin in the directory,
+
+if you want to change the TLB size then you can modify the TLB_SIZE constant at the top of the main_memory.py file
 

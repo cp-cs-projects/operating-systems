@@ -8,21 +8,26 @@ import sys
 def main(argc, argv):
     # Check if the number of arguments is correct
     
-    if argc != 4:
+    if (argc != 4 and argc != 2):
         print("Usage: memSim.py <reference-sequence-file.txt> <FRAMES> <PRA>")
         return 1
-    frames = argv[2]
-    pra = argv[3]
-    if(frames.isdigit() == False):
-        print("FRAMES must be an integer between 1 and 256 inclusive")
-        return 1
-    frames = int(frames)
-    if (frames < 1 or frames > 256):
-        print("FRAMES must be an integer between 1 and 256 inclusive")
-        return 1
-    if( pra != "LRU" and pra != "FIFO" and pra != "OPT"):
-        print("Page replacement algorithm must be FIFO, LRU, or OPT")
-        return 1
+    if argc == 4:
+        frames = argv[2]
+        pra = argv[3]
+        if(frames.isdigit() == False):
+            print("FRAMES must be an integer between 1 and 256 inclusive")
+            return 1
+        frames = int(frames)
+        if (frames < 1 or frames > 256):
+            print("FRAMES must be an integer between 1 and 256 inclusive")
+            return 1
+        if( pra != "LRU" and pra != "FIFO" and pra != "OPT"):
+            print("Page replacement algorithm must be FIFO, LRU, or OPT")
+            return 1  
+    if argc == 2:
+         pra = 'FIFO'
+         frames = 256
+
     try:
         reference_file = open(argv[1], "r")
     except FileNotFoundError:
