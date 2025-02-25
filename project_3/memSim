@@ -7,6 +7,7 @@ import sys
 # ./memSim.py <reference-sequence-file.txt> <FRAMES> <PRA>
 def main(argc, argv):
     # Check if the number of arguments is correct
+    
     if argc != 4:
         print("Usage: memSim.py <reference-sequence-file.txt> <FRAMES> <PRA>")
         return 1
