@@ -20,9 +20,10 @@ class memory:
 
 
     def get_page(self, page_number):
-        self.page_refs[page_number].pop(0)
-        if len(self.page_refs[page_number]) == 0:
-            self.page_refs[page_number].append(float('inf')) # if no more references, set to infinity
+        if self.pra == "OPT":
+            self.page_refs[page_number].pop(0)
+            if len(self.page_refs[page_number]) == 0:
+                self.page_refs[page_number].append(float('inf')) # if no more references, set to infinity
         # check if page is in TLB
         frame_number = self.tlb_lookup(page_number)
         if frame_number is not None:
