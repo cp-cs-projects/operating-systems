@@ -60,6 +60,12 @@ static void full_path(char fpath[PATH_MAX], const char *path) {
     strncat(fpath, path, PATH_MAX);
 }
 
+static void create_encryption_key(const char *passphrase, unsigned char key[AES_BLOCK_SIZE]) {
+    // Use the passphrase to generate a key
+    
+    return;
+}
+
 static int xmp_getattr(const char *path, struct stat *stbuf)
 {
     int res;
