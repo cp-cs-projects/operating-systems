@@ -28,6 +28,8 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <openssl/evp.h>
+#include <openssl/aes.h>
 #include <openssl/rand.h>
 // #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>
@@ -38,10 +40,13 @@
 struct xmp_context {
     char *mirror_dir;
     char *passphrase;
+    unsigned char *enc_key;
 };
 
+#undef PATH_MAX
 #define PATH_MAX 1024
 #define AES_BLOCK_SIZE 16
+#define KEY_SIZE 32
 #define CTX_DATA ((struct xmp_context *) fuse_get_context()->private_data)
 
 const int log_op(const char *string) {
@@ -60,10 +65,16 @@ static void full_path(char fpath[PATH_MAX], const char *path) {
     strncat(fpath, path, PATH_MAX);
 }
 
-static void create_encryption_key(const char *passphrase, unsigned char key[AES_BLOCK_SIZE]) {
+static void create_encryption_key(const char *passphrase, unsigned char key[KEY_SIZE]) {
     // Use the passphrase to generate a key
-    
-    return;
+    if (!PKCS5_PBKDF2_HMAC(passphrase, strlen(passphrase),
+                           NULL, 0,  // No salt
+                           100000, // Iteration count
+                           EVP_sha256(),
+                           KEY_SIZE, key)) {
+        fprintf(stderr, "Error deriving key\n");
+        return;
+    }
 }
 
 static int xmp_getattr(const char *path, struct stat *stbuf)
@@ -534,6 +545,10 @@ int main(int argc, char *argv[])
     printf("Enter passphrase: ");
     scanf("%s", passphrase);
     ctx->passphrase = passphrase;
+
+    unsigned char key[KEY_SIZE];
+    create_encryption_key(passphrase, key);
+    ctx->enc_key = key;
 
     umask(0);
     return fuse_main(argc, argv, &xmp_oper, ctx);
