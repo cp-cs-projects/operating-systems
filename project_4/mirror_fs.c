@@ -174,24 +174,6 @@ static int xmp_mknod(const char *path, mode_t mode, dev_t rdev)
         printf("\n");
     }
 
-    /* Store IV as an extended attribute */
-    // if (setxattr(fpath, "user.aes_iv", iv, AES_BLOCK_SIZE, 0) == -1) {
-    //     fprintf(stderr, "Error setting xattr for IV\n");
-    //     return -errno;
-    // }
-
-    // test getting to se if its there...
-    // if (getxattr(fpath, "user.aes_iv", iv, AES_BLOCK_SIZE) == -1) {
-    //     fprintf(stderr, "Error getting xattr for IV\n");
-    // } else {
-    //     printf("IV from xattr: ");
-    //     int i;
-    //     for (i = 0; i < AES_BLOCK_SIZE; i++) {
-    //         printf("%02x", iv[i]);
-    //     }
-    //     printf("\n");
-    // }
-
     return 0;
 }
 
