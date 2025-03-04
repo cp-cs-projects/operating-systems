@@ -31,6 +31,7 @@
 #include <openssl/evp.h>
 #include <openssl/aes.h>
 #include <openssl/rand.h>
+#include <libgen.h>
 // #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>
 // #endif
@@ -176,15 +177,40 @@ static int xmp_mknod(const char *path, mode_t mode, dev_t rdev)
     if (!RAND_bytes(iv, AES_BLOCK_SIZE)) {
         fprintf(stderr, "Error generating IV\n");
         return -EIO;  // Return I/O error if IV generation fails
-    } else {
-        printf("IV: ");
-        int i;
-        for (i = 0; i < AES_BLOCK_SIZE; i++) {
-            printf("%02x", iv[i]);
-        }
-        printf("\n");
     }
 
+    /* look for .iv dir */
+    char iv_dir[PATH_MAX];
+    char iv_path[PATH_MAX];
+
+    // Extract parent directory of fpath
+    snprintf(iv_dir, sizeof(iv_dir), "%s/.iv", dirname(strdup(fpath)));
+
+    // Check if the .iv directory exists, create it if not
+    struct stat st;
+    if (stat(iv_dir, &st) == -1) {
+        if (mkdir(iv_dir, 0755) == -1) {
+            fprintf(stderr, "Error creating .iv directory\n");
+            return -errno;
+        }
+    }
+
+    // Construct the IV file path inside .iv directory
+    snprintf(iv_path, sizeof(iv_path), "%s/.%s", iv_dir, basename(fpath));
+
+    // Create and open the IV file
+    int fd = open(iv_path, O_CREAT | O_WRONLY, 0644);
+    if (fd == -1) {
+        fprintf(stderr, "Error creating IV file: %s\n", iv_path);
+        return -errno;
+    }
+
+    // Write the IV to the file
+    if (write(fd, iv, AES_BLOCK_SIZE) == -1) {
+        fprintf(stderr, "Error writing IV to file: %s\n", iv_path);
+        return -errno;
+    }
+    
     return 0;
 }
 
