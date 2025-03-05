@@ -31,6 +31,7 @@
 #include <openssl/evp.h>
 #include <openssl/aes.h>
 #include <openssl/rand.h>
+#include <libgen.h>
 // #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>
 // #endif
@@ -44,7 +45,7 @@ struct xmp_context {
 };
 
 #undef PATH_MAX
-#define PATH_MAX 1024
+#define PATH_MAX 4096
 #define AES_BLOCK_SIZE 16
 #define KEY_SIZE 32
 #define CTX_DATA ((struct xmp_context *) fuse_get_context()->private_data)
@@ -52,12 +53,6 @@ struct xmp_context {
 const int log_op(const char *string) {
     printf("----- EXECUTING: %s -----\n", string);
     return 0;
-}
-
-void generate_iv(unsigned char iv[AES_BLOCK_SIZE]) {
-    if (!RAND_bytes(iv, AES_BLOCK_SIZE)) {
-        fprintf(stderr, "Error generating IV\n");
-    }
 }
 
 static void full_path(char fpath[PATH_MAX], const char *path) {
@@ -176,15 +171,57 @@ static int xmp_mknod(const char *path, mode_t mode, dev_t rdev)
     if (!RAND_bytes(iv, AES_BLOCK_SIZE)) {
         fprintf(stderr, "Error generating IV\n");
         return -EIO;  // Return I/O error if IV generation fails
-    } else {
-        printf("IV: ");
-        int i;
-        for (i = 0; i < AES_BLOCK_SIZE; i++) {
-            printf("%02x", iv[i]);
-        }
-        printf("\n");
     }
 
+    /* look for .iv dir */
+    char iv_dir[PATH_MAX];
+    char iv_path[PATH_MAX];
+    char *fpcpy1 = strdup(fpath);
+    char *fpcpy2 = strdup(fpath);
+    if (!fpcpy1 || !fpcpy2) {
+        fprintf(stderr, "Memory allocation error\n");
+        return -ENOMEM;
+    }
+
+
+    // Extract parent directory of fpath
+    snprintf(iv_dir, sizeof(iv_dir), "%s/.iv", dirname(fpcpy1));
+
+    // Check if the .iv directory exists, create it if not
+    struct stat st;
+    if (stat(iv_dir, &st) == -1) {
+        if (mkdir(iv_dir, 0755) == -1) {
+            fprintf(stderr, "Error creating .iv directory\n");
+            free(fpcpy1);
+            free(fpcpy2);
+            return -errno;
+        }
+    }
+
+    // Construct the IV file path inside .iv directory
+    snprintf(iv_path, sizeof(iv_path), "%s/.%s", iv_dir, basename(fpcpy2));
+
+    // Create and open the IV file
+    int fd = open(iv_path, O_CREAT | O_WRONLY, 0644);
+    if (fd == -1) {
+        fprintf(stderr, "Error creating IV file: %s\n", iv_path);
+        free(fpcpy1);
+        free(fpcpy2);
+        return -errno;
+    }
+
+    // Write the IV to the file
+    if (write(fd, iv, AES_BLOCK_SIZE) == -1) {
+        fprintf(stderr, "Error writing IV to file: %s\n", iv_path);
+        free(fpcpy1);
+        free(fpcpy2);
+        return -errno;
+    }
+    
+    fd = close(fd);
+    free(fpcpy1);
+    free(fpcpy2);
+    
     return 0;
 }
 
@@ -213,6 +250,33 @@ static int xmp_unlink(const char *path)
     if (res == -1)
         return -errno;
 
+    // delete associated .iv file if one exists
+    
+    // not sure if below commented out is necessary/helpful; needs testing with symlinks
+    // char resolved_path[PATH_MAX];
+    // if (!realpath(fpath, resolved_path)) {
+    //     return -errno;
+    // }
+
+    char *fpcpy1 = strdup(fpath);
+    char *fpcpy2 = strdup(fpath);
+    if (!fpcpy1 || !fpcpy2) {
+        fprintf(stderr, "Memory allocation error\n");
+        return -ENOMEM;
+    }
+
+    char iv_path[PATH_MAX];
+    snprintf(iv_path, sizeof(iv_path), "%s/.iv/.%s", dirname(fpcpy1), basename(fpcpy2));
+
+    res = unlink(iv_path);
+    if (res == -1 && errno != ENOENT) {  // Ignore error if file does not exist
+        free(fpcpy1);
+        free(fpcpy2);
+        return -errno;
+    }
+
+    free(fpcpy1);
+    free(fpcpy2);
     return 0;
 }
 
@@ -234,12 +298,18 @@ static int xmp_symlink(const char *from, const char *to)
 {
     log_op("xmp_symlink");
     int res;
-    char fpath[PATH_MAX];
-    full_path(fpath, from);
+    char fpath_from[PATH_MAX];
+    char fpath_to[PATH_MAX];
+    full_path(fpath_from, from);
+    full_path(fpath_to, to);
 
-    res = symlink(fpath, to);
+
+    res = symlink(fpath_from, fpath_to);
     if (res == -1)
         return -errno;
+
+    // what to do about .iv file???
+    // create own or create one with a link to the original?
 
     return 0;
 }
@@ -248,12 +318,40 @@ static int xmp_rename(const char *from, const char *to)
 {
     log_op("xmp_rename");
     int res;
-    char fpath[PATH_MAX];
-    full_path(fpath, from);
+    char fpath_from[PATH_MAX];
+    char fpath_to[PATH_MAX];
+    full_path(fpath_from, from);
+    full_path(fpath_to, to);
 
-    res = rename(fpath, to);
+    res = rename(fpath_from, fpath_to);
     if (res == -1)
         return -errno;
+
+    // rename associated .iv file
+    char *fpcpy1 = strdup(fpath_from);
+    char *fpcpy2 = strdup(fpath_from);
+    if (!fpcpy1 || !fpcpy2) {
+        fprintf(stderr, "Memory allocation error\n");
+        return -ENOMEM;
+    }
+
+    char old_iv_path[PATH_MAX];
+    char new_iv_path[PATH_MAX];
+    // get original .iv file
+    snprintf(old_iv_path, sizeof(old_iv_path), "%s/.iv/.%s", dirname(fpcpy1), basename(fpcpy2));
+    // create path for new .iv file with new name
+    snprintf(new_iv_path, sizeof(new_iv_path), "%s/.iv/.%s", fpcpy1, basename(fpath_to)); // fpath_to is corrupt after this!!
+
+    // rename .iv file
+    res = rename(old_iv_path, new_iv_path);
+    if (res == -1) {
+        free(fpcpy1);
+        free(fpcpy2);
+        return -errno;
+    }
+
+    free(fpcpy1);
+    free(fpcpy2);
 
     return 0;
 }
@@ -262,12 +360,17 @@ static int xmp_link(const char *from, const char *to)
 {
     log_op("xmp_link");
     int res;
-    char fpath[PATH_MAX];
-    full_path(fpath, from);
+    char fpath_from[PATH_MAX];
+    char fpath_to[PATH_MAX];
+    full_path(fpath_from, from);
+    full_path(fpath_to, to);
 
-    res = link(fpath, to);
+    res = link(fpath_from, fpath_to);
     if (res == -1)
         return -errno;
+
+    // what to do about .iv file???
+    // create own or create one with a link to the original?
 
     return 0;
 }
@@ -522,7 +625,7 @@ int main(int argc, char *argv[])
 
     // Get current working directory
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
-        printf("Current working directory: %s\n", cwd);
+        // printf("Current working directory: %s\n", cwd);
     } else {
         perror("getcwd() error");
         return 1;
@@ -546,6 +649,7 @@ int main(int argc, char *argv[])
     scanf("%s", passphrase);
     ctx->passphrase = passphrase;
 
+    // Get encryption key from passphrase
     unsigned char key[KEY_SIZE];
     create_encryption_key(passphrase, key);
     ctx->enc_key = key;
