@@ -609,14 +609,10 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 
     if (1 != EVP_DecryptFinal_ex(ctx, plaintext + len, &len)) {
         fprintf(stderr, "Error finalizing the decryption in read\n");
-        //fflush
-        const char *error_message = "Sorry, this file is not available.\n";
-        size_t message_len = strlen(error_message);
-        memcpy(buf, error_message, message_len);
         EVP_CIPHER_CTX_free(ctx);
         free(ciphertext);
         free(plaintext);
-        return message_len;
+        return -EIO;
     }
     plaintext_len += len;
     EVP_CIPHER_CTX_free(ctx);

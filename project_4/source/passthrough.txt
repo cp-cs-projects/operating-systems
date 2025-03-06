@@ -1,1 +1,5 @@
-practice passthrough test
+key generation
+- prompt the user for a passphrase and then generate a key from that
+- store the key in memory not in disk
+- store IVs probably on disk as files within a .iv directory
+- need a random iv for every single file when it's created or written
