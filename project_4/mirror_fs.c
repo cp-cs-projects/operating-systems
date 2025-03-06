@@ -72,6 +72,58 @@ static void create_encryption_key(const char *passphrase, unsigned char key[KEY_
     }
 }
 
+int decrypt(unsigned char *ciphertext, off_t file_size, unsigned char iv[AES_BLOCK_SIZE], char* buf)
+{   
+    int len;
+    int plaintext_len;
+    EVP_CIPHER_CTX *ctx;
+    /* now let's actually decrypt */
+    if(!(ctx = EVP_CIPHER_CTX_new())) {
+        fprintf(stderr, "Error initializing the cipher context in read\n");
+        free(ciphertext);
+        return -EIO;
+    }
+
+    unsigned char *plaintext = malloc(file_size);  // is it safe to assume encrypted file size is >= plaintext file size?
+    if (!plaintext) {
+        fprintf(stderr, "Memory allocation error in read\n");
+        EVP_CIPHER_CTX_free(ctx);
+        free(ciphertext);
+        return -ENOMEM;
+    }
+
+    if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, CTX_DATA->enc_key, iv)) {
+        fprintf(stderr, "Error initializing the decryption operation in read\n");
+        EVP_CIPHER_CTX_free(ctx);
+        free(ciphertext);
+        free(plaintext);
+        return -EIO;
+    }
+
+    if (1 != EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, file_size)) {
+        fprintf(stderr, "Error decrypting in read\n");
+        EVP_CIPHER_CTX_free(ctx);
+        free(ciphertext);
+        free(plaintext);
+        return -EIO;
+    }
+    plaintext_len = len;
+
+    if (1 != EVP_DecryptFinal_ex(ctx, plaintext + len, &len)) {
+        fprintf(stderr, "Error finalizing the decryption in read\n");
+        EVP_CIPHER_CTX_free(ctx);
+        free(ciphertext);
+        free(plaintext);
+        return -EIO;
+    }
+    free(ciphertext);
+    plaintext_len += len;
+    free(plaintext);
+    memcpy(buf, plaintext, plaintext_len);
+    EVP_CIPHER_CTX_free(ctx);
+    return plaintext_len;
+}
+
 static int xmp_getattr(const char *path, struct stat *stbuf)
 {
     int res;
@@ -506,10 +558,8 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
     int res;
     char fpath[PATH_MAX];
     full_path(fpath, path);
-    int len;
+
     off_t file_size;
-    int plaintext_len;
-    EVP_CIPHER_CTX *ctx;
 
     (void) fi;
 
@@ -576,53 +626,13 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
     fd = close(fd);
     
     /* now let's actually decrypt */
-    if(!(ctx = EVP_CIPHER_CTX_new())) {
-        fprintf(stderr, "Error initializing the cipher context in read\n");
-        free(ciphertext);
-        return -EIO;
-    }
-
-    unsigned char *plaintext = malloc(file_size);  // is it safe to assume encrypted file size is >= plaintext file size?
-    if (!plaintext) {
-        fprintf(stderr, "Memory allocation error in read\n");
-        EVP_CIPHER_CTX_free(ctx);
-        free(ciphertext);
-        return -ENOMEM;
-    }
-
-    if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, CTX_DATA->enc_key, iv)) {
-        fprintf(stderr, "Error initializing the decryption operation in read\n");
-        EVP_CIPHER_CTX_free(ctx);
-        free(ciphertext);
-        free(plaintext);
-        return -EIO;
-    }
-
-    if (1 != EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, file_size)) {
-        fprintf(stderr, "Error decrypting in read\n");
-        EVP_CIPHER_CTX_free(ctx);
-        free(ciphertext);
-        free(plaintext);
-        return -EIO;
-    }
-    plaintext_len = len;
-
-    if (1 != EVP_DecryptFinal_ex(ctx, plaintext + len, &len)) {
-        fprintf(stderr, "Error finalizing the decryption in read\n");
-        EVP_CIPHER_CTX_free(ctx);
-        free(ciphertext);
-        free(plaintext);
-        return -EIO;
-    }
-    plaintext_len += len;
-    EVP_CIPHER_CTX_free(ctx);
-    free(ciphertext);
-    res = plaintext_len;
-    memcpy(buf, plaintext, plaintext_len); //write the plaintext into the buffer
-
-    free(plaintext);
+    res = decrypt(ciphertext, file_size, iv, buf);
+    printf("\n\n\n\n\n\n GOT HERE\n\n\n\n\n\n");
+    //free(ciphertext);
+   // memcpy(buf, plaintext, plaintext_len); //write the plaintext into the buffer
     return res;
 }
+
 
 static int xmp_write(const char *path, const char *buf, size_t size,
                      off_t offset, struct fuse_file_info *fi)
