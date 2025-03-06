@@ -304,8 +304,8 @@ static int xmp_unlink(const char *path)
     //     return -errno;
     // }
 
-    char *fpcpy1 = strdup(fpath);
-    char *fpcpy2 = strdup(fpath);
+    char *fpcpy1 = strdup(fpath); 
+    char *fpcpy2 = strdup(fpath); 
     if (!fpcpy1 || !fpcpy2) {
         fprintf(stderr, "Memory allocation error\n");
         return -ENOMEM;
@@ -609,17 +609,20 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
 
     if (1 != EVP_DecryptFinal_ex(ctx, plaintext + len, &len)) {
         fprintf(stderr, "Error finalizing the decryption in read\n");
+        //fflush
+        const char *error_message = "Sorry, this file is not available.\n";
+        size_t message_len = strlen(error_message);
+        memcpy(buf, error_message, message_len);
         EVP_CIPHER_CTX_free(ctx);
         free(ciphertext);
         free(plaintext);
-        return -EIO;
+        return message_len;
     }
     plaintext_len += len;
     EVP_CIPHER_CTX_free(ctx);
     free(ciphertext);
     res = plaintext_len;
     memcpy(buf, plaintext, plaintext_len); //write the plaintext into the buffer
-
 
     free(plaintext);
     return res;
