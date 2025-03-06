@@ -32,9 +32,6 @@
 #include <openssl/aes.h>
 #include <openssl/rand.h>
 #include <libgen.h>
-// #ifdef HAVE_SETXATTR
-#include <sys/xattr.h>
-// #endif
 /* Imports */
 
 
@@ -532,51 +529,6 @@ static int xmp_fsync(const char *path, int isdatasync,
     return 0;
 }
 
-#ifdef HAVE_SETXATTR
-/* xattr operations are optional and can safely be left unimplemented */
-static int xmp_setxattr(const char *path, const char *name, const char *value,
-                        size_t size, int flags)
-{
-    char fpath[PATH_MAX];
-    full_path(fpath, path);
-    int res = lsetxattr(fpath, name, value, size, flags);
-    if (res == -1)
-        return -errno;
-    return 0;
-}
-
-static int xmp_getxattr(const char *path, const char *name, char *value,
-                    size_t size)
-{
-    char fpath[PATH_MAX];
-    full_path(fpath, path);
-    int res = lgetxattr(fpath, name, value, size);
-    if (res == -1)
-        return -errno;
-    return res;
-}
-
-static int xmp_listxattr(const char *path, char *list, size_t size)
-{
-    char fpath[PATH_MAX];
-    full_path(fpath, path);
-    int res = llistxattr(fpath, list, size);
-    if (res == -1)
-        return -errno;
-    return res;
-}
-
-static int xmp_removexattr(const char *path, const char *name)
-{
-    char fpath[PATH_MAX];
-    full_path(fpath, path);
-    int res = lremovexattr(fpath, name);
-    if (res == -1)
-        return -errno;
-    return 0;
-}
-#endif /* HAVE_SETXATTR */
-
 static struct fuse_operations xmp_oper = {
     .getattr	= xmp_getattr,
     .access	= xmp_access,
@@ -599,12 +551,6 @@ static struct fuse_operations xmp_oper = {
     .statfs	= xmp_statfs,
     .release	= xmp_release,
     .fsync	= xmp_fsync,
-#ifdef HAVE_SETXATTR
-    .setxattr	= xmp_setxattr,
-    .getxattr	= xmp_getxattr,
-    .listxattr	= xmp_listxattr,
-    .removexattr= xmp_removexattr,
-#endif
 };
 
 int main(int argc, char *argv[])
