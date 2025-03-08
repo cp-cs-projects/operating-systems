@@ -72,6 +72,42 @@ static void create_encryption_key(const char *passphrase, unsigned char key[KEY_
     }
 }
 
+int encrypt_file(unsigned char* plaintext, unsigned char* ciphertext, unsigned char iv[AES_BLOCK_SIZE])
+{
+    EVP_CIPHER_CTX *ctx;
+    int len;
+    int ciphertext_len;
+
+    if(!(ctx = EVP_CIPHER_CTX_new())) {\
+        fprintf(stderr, "Error initializing cipher context\n");
+        return -EIO;
+    }
+
+    if (1 != EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, CTX_DATA->enc_key, iv)) {
+        EVP_CIPHER_CTX_free(ctx);
+        fprintf(stderr, "Error initializing encryption operation\n");
+        return -EIO;
+    }
+
+    if (1 != EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, AES_BLOCK_SIZE)) { // the plaintext len is just the block size because that's the length of our 0 fill placeholder
+        EVP_CIPHER_CTX_free(ctx);
+        fprintf(stderr, "Error initializing encryption operation\n");
+        return -EIO;
+    }
+    ciphertext_len = len;
+
+    if (1 != EVP_EncryptFinal_ex(ctx, ciphertext + len, &len)) {
+        EVP_CIPHER_CTX_free(ctx);
+        fprintf(stderr, "Error finalizing the encryption\n");
+        return -EIO;
+    }
+
+    ciphertext_len += len;
+    EVP_CIPHER_CTX_free(ctx);
+    return ciphertext_len;
+}
+
+
 int decrypt(unsigned char *ciphertext, off_t file_size, unsigned char iv[AES_BLOCK_SIZE], char* buf)
 {   
     int len;
@@ -204,11 +240,8 @@ static int xmp_mknod(const char *path, mode_t mode, dev_t rdev)
     int res;
     char fpath[PATH_MAX];
     full_path(fpath, path);
-    EVP_CIPHER_CTX *ctx;
     int ciphertext_len;
-    int len;
-
-
+    
     /* Generate a random IV */
     unsigned char iv[AES_BLOCK_SIZE];
     if (!RAND_bytes(iv, AES_BLOCK_SIZE)) {
@@ -216,45 +249,34 @@ static int xmp_mknod(const char *path, mode_t mode, dev_t rdev)
         return -EIO;  // Return I/O error if IV generation fails
     }
 
-
     /* On Linux this could just be 'mknod(fpath, mode, rdev)' but this
        is more portable */
     if (S_ISREG(mode)) {
         res = open(fpath, O_CREAT | O_EXCL | O_WRONLY, mode);
         if (res >= 0)
         {
-            unsigned char plaintext[AES_BLOCK_SIZE] = {0};  // since it's empty we need something to encrypt so add a 0 fill placeholder
-            unsigned char ciphertext[AES_BLOCK_SIZE + EVP_MAX_BLOCK_LENGTH];
+            unsigned char* plaintext = malloc(AES_BLOCK_SIZE);  // since it's empty we need something to encrypt so add a 0 fill placeholder
+            unsigned char* ciphertext = malloc(AES_BLOCK_SIZE + EVP_MAX_BLOCK_LENGTH);
 
-            if(!(ctx = EVP_CIPHER_CTX_new())) {\
-                fprintf(stderr, "Error initializing cipher context\n");
+            if (!plaintext || !ciphertext) {
+                fprintf(stderr, "Memory allocation error\n");
+                free(plaintext);
+                free(ciphertext);
+                res = close(res);
+                return -ENOMEM;
+            }
+
+            memset(plaintext, 0, AES_BLOCK_SIZE);
+
+            ciphertext_len = encrypt_file(plaintext, ciphertext, iv);
+
+            if (ciphertext_len < 0) { // check that encryption went ok
+                fprintf(stderr, "Encryption error\n");
+                free(plaintext);
+                free(ciphertext);
                 res = close(res);
                 return -EIO;
             }
-
-            if (1 != EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, CTX_DATA->enc_key, iv)) {
-                EVP_CIPHER_CTX_free(ctx);
-                fprintf(stderr, "Error initializing encryption operation\n");
-                res = close(res);
-                return -EIO;
-            }
-
-            if (1 != EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, AES_BLOCK_SIZE)) { // the plaintext len is just the block size because that's the length of our 0 fill placeholder
-                EVP_CIPHER_CTX_free(ctx);
-                fprintf(stderr, "Error initializing encryption operation\n");
-                res = close(res);
-                return -EIO;
-            }
-            ciphertext_len = len;
-
-            if (1 != EVP_EncryptFinal_ex(ctx, ciphertext + len, &len)) {
-                EVP_CIPHER_CTX_free(ctx);
-                fprintf(stderr, "Error finalizing the encryption\n");
-                res = close(res);
-                return -EIO;
-            }
-            ciphertext_len += len;
-            EVP_CIPHER_CTX_free(ctx);
 
             // Write encrypted placeholder to the file
             if (ciphertext_len != write(res, ciphertext, ciphertext_len)) {
@@ -262,6 +284,8 @@ static int xmp_mknod(const char *path, mode_t mode, dev_t rdev)
                 res = close(res);
                 return -EIO;
             }
+            free(plaintext);
+            free(ciphertext);
             res = close(res);
         }
     } else if (S_ISFIFO(mode))
@@ -627,9 +651,6 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
     
     /* now let's actually decrypt */
     res = decrypt(ciphertext, file_size, iv, buf);
-    printf("\n\n\n\n\n\n GOT HERE\n\n\n\n\n\n");
-    //free(ciphertext);
-   // memcpy(buf, plaintext, plaintext_len); //write the plaintext into the buffer
     return res;
 }
 
