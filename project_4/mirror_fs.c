@@ -70,14 +70,26 @@ static void full_path(char fpath[PATH_MAX], const char *path) {
 
 static void create_encryption_key(const char *passphrase, unsigned char key[KEY_SIZE]) {
     // Use the passphrase to generate a key
-    if (!PKCS5_PBKDF2_HMAC(passphrase, strlen(passphrase),
-                           NULL, 0,  // No salt
-                           100000, // Iteration count
-                           EVP_sha256(),
-                           KEY_SIZE, key)) {
-        fprintf(stderr, "Error deriving key\n");
-        return;
-    }
+    unsigned char iv[KEY_SIZE];
+    int nrounds = 5;
+    
+    /* tmp vars */
+    int i;
+
+    if(!passphrase){
+	    /* Error */
+	    fprintf(stderr, "Key_str must not be NULL\n");
+	    return;
+	}
+
+	/* Build Key from String */
+	i = EVP_BytesToKey(EVP_aes_256_cbc(), EVP_sha1(), NULL,
+			   (unsigned char*)passphrase, strlen(passphrase), nrounds, key, iv);
+	if (i != 32) {
+	    /* Error */
+	    fprintf(stderr, "Key size is %d bits - should be 256 bits\n", i*8);
+	    return;
+	}
 }
 
 static int xmp_getattr(const char *path, struct stat *stbuf)
