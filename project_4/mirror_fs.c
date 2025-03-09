@@ -72,7 +72,7 @@ static void create_encryption_key(const char *passphrase, unsigned char key[KEY_
     }
 }
 
-int encrypt_file(unsigned char* plaintext, unsigned char* ciphertext, unsigned char iv[AES_BLOCK_SIZE])
+int encrypt_file(unsigned char* plaintext, unsigned char* ciphertext, unsigned char iv[AES_BLOCK_SIZE]) 
 {
     EVP_CIPHER_CTX *ctx;
     int len;
@@ -534,10 +534,31 @@ static int xmp_truncate(const char *path, off_t size)
     char fpath[PATH_MAX];
     full_path(fpath, path);
 
-    res = truncate(fpath, size);
-    if (res == -1)
-        return -errno;
+    char iv_path[PATH_MAX];
+    char *fpcpy1 = strdup(fpath);
+    char *fpcpy2 = strdup(fpath);
+    if (!fpcpy1 || !fpcpy2) {
+        fprintf(stderr, "Memory allocation error\n");
+        return -ENOMEM;
+    }
+    snprintf(iv_path, sizeof(iv_path), "%s/.iv/.%s", dirname(fpcpy1), basename(fpcpy2));
+    free(fpcpy1);
+    free(fpcpy2);
 
+    struct stat st;
+    int encrypted = (stat(iv_path, &st) == 0);
+
+    if(!encrypted)
+    {
+        printf("\n\n\n\n\n\n UNENCRYPTED TRUNCATE \n\n\n\n\n\n");
+        res = truncate(fpath, size);
+        if (res == -1)
+            return -errno;
+
+        return 0;
+    }
+
+    printf("\n\n\n\n\n\n HITTING TRUNCATE \n\n\n\n\n\n");
     return 0;
 }
 
@@ -609,6 +630,7 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
     fd = open(fpath, O_RDONLY);
     if (fd == -1)
         return -errno;
+    printf("\n\n\n\n\n\n\n\n\n GOT HERE READING %d \n\n\n\n\n\n\n", encrypted);
 
     if (!encrypted) { // if the file is not encrypted then passthrough
         res = pread(fd, buf, size, offset);
@@ -652,7 +674,27 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
     fd = close(fd);
     
     /* now let's actually decrypt */
+    printf("File size: %ld\n", file_size);
+    printf("Encrypted contents: ");
+    int i;
+    for (i = 0; i < file_size; i++) {
+        printf("%02x ", ciphertext[i]);  // Print hex values
+    }
+    printf("\n");
+
     res = decrypt_file(ciphertext, file_size, iv, buf);
+
+    if (res == 0) {  // If the decrypted file is empty
+        printf("Empty file detected. Returning 16 zero bytes.\n");
+        memset(buf, 0, AES_BLOCK_SIZE);
+        return AES_BLOCK_SIZE;  // Return 16 bytes of padding
+    }
+
+    printf("Decrypted contents: ");
+    for (i = 0; i < file_size; i++) {
+        printf("%02x ", buf[i]);  // Print hex values
+    }
+    printf("\n");
     return res;
 }
 
@@ -661,22 +703,155 @@ static int xmp_write(const char *path, const char *buf, size_t size,
                      off_t offset, struct fuse_file_info *fi)
 {
     log_op("xmp_write");
+    printf("Attempting to write %zu bytes to %s at offset %ld\n", size, path, offset);
     int fd;
     int res;
     char fpath[PATH_MAX];
     full_path(fpath, path);
+    off_t file_size;
+    int plaintext_len;
 
     (void) fi;
-    fd = open(fpath, O_WRONLY);
+
+    /* look for .iv dir and file to see if the file is encrypted*/
+    //char iv_dir[PATH_MAX];
+    char iv_path[PATH_MAX];
+    char *fpcpy1 = strdup(fpath);
+    char *fpcpy2 = strdup(fpath);
+    if (!fpcpy1 || !fpcpy2) {
+        fprintf(stderr, "Memory allocation error\n");
+        return -ENOMEM;
+    }
+
+    snprintf(iv_path, sizeof(iv_path), "%s/.iv/.%s", dirname(fpcpy1), basename(fpcpy2));
+    free(fpcpy1);
+    free(fpcpy2);
+
+    struct stat st;
+    int encrypted = (stat(iv_path, &st) == 0);
+
+    fd = open(fpath, O_RDWR);
     if (fd == -1)
         return -errno;
 
-    res = pwrite(fd, buf, size, offset);
-    if (res == -1)
-        res = -errno;
+    if (!encrypted) { // if the file is not encrypted then passthrough
+        res = pwrite(fd, buf, size, offset);
+        if (res == -1)
+            res = -errno;
+        fd = close(fd);
+        return res;
+    }
+    printf("\n\n\n\n\n\n\n\n\n GOT HERE WRITING %d \n\n\n\n\n\n\n", encrypted);
+    /*else we need to decrypt and then append and then ecrypt again*/
+    //decrypt
+    unsigned char iv[AES_BLOCK_SIZE]; // find the iv file
+    int iv_fd = open(iv_path, O_RDONLY);
+    if (iv_fd == -1) {
+        fprintf(stderr, "Error opening IV file: %s\n", iv_path);
+        close(fd);
+        return -errno;
+    }
+    if (read(iv_fd, iv, AES_BLOCK_SIZE) != AES_BLOCK_SIZE) { // try to read the IV
+        fprintf(stderr, "Error reading IV from file: %s\n", iv_path);
+        close(fd);
+        close(iv_fd);
+        return -EIO;
+    }
+    iv_fd = close(iv_fd);
 
+    /* now let's read the entire encrypted data */
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+
+    unsigned char *ciphertext = malloc(file_size);
+    if (!ciphertext) {
+        close(fd);
+        return -ENOMEM;
+    }
+
+    off_t bytes_read = pread(fd, ciphertext, file_size, 0);
+
+    if (bytes_read != file_size) { // read entire encrypted data
+        fprintf(stderr, "\n\nERRORING IN READ PART OF WRITE  error number %d fd = %d cipher text = %s file_size = %d bytes read %d\n\n\n", -errno, fd, ciphertext, (int)file_size, (int)bytes_read);
+        free(ciphertext);
+        fd = close(fd);
+        return -EIO;
+    }
+    char* plaintext = malloc(file_size + size);
+    if (!plaintext) {
+        free(ciphertext);
+        close(fd);
+        return -ENOMEM;
+    }
+
+    res = decrypt_file(ciphertext, file_size, iv, plaintext); //res holds the plaintext file len, buf contains the plaintext
+    plaintext_len = res; //Actual decrypted size 
+
+    /* if new data is bigger than plaintext size, need to expand */
+
+    if (plaintext_len == 0) {
+        printf("Empty file detected in write. Initializing to 16 bytes of zeros.\n");
+        plaintext_len = offset + size;
+        plaintext = realloc(plaintext, plaintext_len);
+        if (!plaintext) {
+            close(fd);
+            return -ENOMEM;
+        }
+        memset(plaintext, 0, plaintext_len);
+    }
+    /* Expand plaintext size if new data requires more space */
+    if (offset + size > plaintext_len) {
+        plaintext_len = offset + size;
+    }
+
+    plaintext = realloc(plaintext, plaintext_len);
+
+    if (!plaintext) {
+        close(fd);
+        return -ENOMEM;
+    }
+
+    memcpy(plaintext + offset, buf, size);
+
+    /*now encrypt back*/
+    unsigned char* new_ciphertext = malloc(plaintext_len + AES_BLOCK_SIZE); //account for padding
+    if (!new_ciphertext) {
+        free(plaintext);
+        close(fd);
+        return -ENOMEM;
+    }
+
+    int ciphertext_len = encrypt_file((unsigned char *)plaintext, new_ciphertext, iv);
+
+    if (ciphertext_len < 0) {
+        fprintf(stderr, "Encryption error in write\n");
+        free(plaintext);
+        free(new_ciphertext);
+        close(fd);
+        return -EIO;
+    }
+    free(plaintext); // We don't need plaintext anymore
+
+    /* Write encrypted data back to file */
+    if (ftruncate(fd, ciphertext_len) == -1) {
+        fprintf(stderr, "Error truncating file\n");
+    }
+
+    int i; 
+    printf("Writing ciphertext: ");
+    for (i = 0; i < ciphertext_len; i++) {
+        printf("%02x\n", new_ciphertext[i]);
+    }
+    printf("\n");
+    //res = pwrite(fd, new_ciphertext, ciphertext_len, 0);
+    ssize_t bytes_written = pwrite(fd, new_ciphertext, ciphertext_len, 0);
+    if (bytes_written != ciphertext_len) {
+        fprintf(stderr, "\n\nERROR: Expected to write %d bytes, but wrote %ld\n\n", ciphertext_len, bytes_written);
+    }
+    printf("plaintext_len: %d, ciphertext_len: %d\n", plaintext_len, ciphertext_len);
+    free(new_ciphertext);
     close(fd);
-    return res;
+    return ciphertext_len;
 }
 
 static int xmp_statfs(const char *path, struct statvfs *stbuf)
@@ -758,7 +933,7 @@ static int xmp_removexattr(const char *path, const char *name)
         return -errno;
     return 0;
 }
-#endif /* HAVE_SETXATTR */
+#endif /* HAVE_SETXATTR */ 
 
 static struct fuse_operations xmp_oper = {
     .getattr	= xmp_getattr,
