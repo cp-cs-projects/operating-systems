@@ -108,7 +108,7 @@ int encrypt_file(unsigned char* plaintext, unsigned char* ciphertext, unsigned c
 }
 
 
-int decrypt(unsigned char *ciphertext, off_t file_size, unsigned char iv[AES_BLOCK_SIZE], char* buf)
+int decrypt_file(unsigned char *ciphertext, off_t file_size, unsigned char iv[AES_BLOCK_SIZE], char* buf)
 {   
     int len;
     int plaintext_len;
@@ -126,7 +126,7 @@ int decrypt(unsigned char *ciphertext, off_t file_size, unsigned char iv[AES_BLO
         EVP_CIPHER_CTX_free(ctx);
         free(ciphertext);
         return -ENOMEM;
-    }
+    } 
 
     if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, CTX_DATA->enc_key, iv)) {
         fprintf(stderr, "Error initializing the decryption operation in read\n");
@@ -154,8 +154,8 @@ int decrypt(unsigned char *ciphertext, off_t file_size, unsigned char iv[AES_BLO
     }
     free(ciphertext);
     plaintext_len += len;
-    free(plaintext);
     memcpy(buf, plaintext, plaintext_len);
+    free(plaintext);
     EVP_CIPHER_CTX_free(ctx);
     return plaintext_len;
 }
@@ -266,7 +266,7 @@ static int xmp_mknod(const char *path, mode_t mode, dev_t rdev)
                 return -ENOMEM;
             }
 
-            memset(plaintext, 0, AES_BLOCK_SIZE);
+            memset(plaintext, 0, AES_BLOCK_SIZE); 
 
             ciphertext_len = encrypt_file(plaintext, ciphertext, iv);
 
@@ -281,6 +281,8 @@ static int xmp_mknod(const char *path, mode_t mode, dev_t rdev)
             // Write encrypted placeholder to the file
             if (ciphertext_len != write(res, ciphertext, ciphertext_len)) {
                 fprintf(stderr, "Error writing encrypted content to file\n");
+                free(plaintext);
+                free(ciphertext);
                 res = close(res);
                 return -EIO;
             }
@@ -650,7 +652,7 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
     fd = close(fd);
     
     /* now let's actually decrypt */
-    res = decrypt(ciphertext, file_size, iv, buf);
+    res = decrypt_file(ciphertext, file_size, iv, buf);
     return res;
 }
 
