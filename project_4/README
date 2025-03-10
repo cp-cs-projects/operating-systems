@@ -1,1 +1,3 @@
-# Isaac Schiffler
+# Isaac Schiffler, Naomi Nayman, Sri Bala, Siri Gunturi
+
+## To run, use `./mirror_fs -s -d <mount point> <source>`
