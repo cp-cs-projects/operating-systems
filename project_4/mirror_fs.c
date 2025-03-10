@@ -56,20 +56,40 @@ const int log_op(const char *string) {
 }
 
 static void full_path(char fpath[PATH_MAX], const char *path) {
+    char adj_path[PATH_MAX];
+
+    // Check if 'from' already starts with '/' to avoid double slashes
+    if (path[0] != '/') {
+        snprintf(adj_path, sizeof(adj_path), "/%s", path); // Prepend '/'; for some reason this is needed...
+    } else {
+        snprintf(adj_path, sizeof(adj_path), "%s", path);
+    }
     strcpy(fpath, CTX_DATA->mirror_dir);
-    strncat(fpath, path, PATH_MAX);
+    strncat(fpath, adj_path, PATH_MAX);
 }
 
 static void create_encryption_key(const char *passphrase, unsigned char key[KEY_SIZE]) {
     // Use the passphrase to generate a key
-    if (!PKCS5_PBKDF2_HMAC(passphrase, strlen(passphrase),
-                           NULL, 0,  // No salt
-                           100000, // Iteration count
-                           EVP_sha256(),
-                           KEY_SIZE, key)) {
-        fprintf(stderr, "Error deriving key\n");
-        return;
-    }
+    unsigned char iv[KEY_SIZE];
+    int nrounds = 5;
+
+    /* tmp vars */
+    int i;
+
+    if(!passphrase){
+	    /* Error */
+	    fprintf(stderr, "Key_str must not be NULL\n");
+	    return;
+	}
+
+	/* Build Key from String */
+	i = EVP_BytesToKey(EVP_aes_256_cbc(), EVP_sha1(), NULL,
+			   (unsigned char*)passphrase, strlen(passphrase), nrounds, key, iv);
+	if (i != 32) {
+	    /* Error */
+	    fprintf(stderr, "Key size is %d bits - should be 256 bits\n", i*8);
+	    return;
+	}
 }
 
 int encrypt_file(unsigned char* plaintext, unsigned char* ciphertext, unsigned char iv[AES_BLOCK_SIZE]) 
@@ -191,6 +211,7 @@ static int xmp_access(const char *path, int mask)
 
 static int xmp_readlink(const char *path, char *buf, size_t size)
 {
+    // need to ensure encrypted files cannot be accessed via symlink
     log_op("xmp_readlink");
     int res;
     char fpath[PATH_MAX];
@@ -432,8 +453,7 @@ static int xmp_symlink(const char *from, const char *to)
     if (res == -1)
         return -errno;
 
-    // what to do about .iv file???
-    // create own or create one with a link to the original?
+    // create a symlink to the original .iv file???
 
     return 0;
 }
@@ -493,8 +513,60 @@ static int xmp_link(const char *from, const char *to)
     if (res == -1)
         return -errno;
 
-    // what to do about .iv file???
-    // create own or create one with a link to the original?
+    /* look for .iv dir */
+    char iv_dir[PATH_MAX];
+    char iv_path[PATH_MAX];
+    char *fpcpy1 = strdup(fpath_to);
+    char *fpcpy2 = strdup(fpath_to);
+    if (!fpcpy1 || !fpcpy2) {
+        fprintf(stderr, "Memory allocation error\n");
+        return -ENOMEM;
+    }
+
+    /* Generate a random IV */
+    unsigned char iv[AES_BLOCK_SIZE];
+    if (!RAND_bytes(iv, AES_BLOCK_SIZE)) {
+        fprintf(stderr, "Error generating IV\n");
+        return -EIO;  // Return I/O error if IV generation fails
+    }
+
+    // Extract parent directory of fpath
+    snprintf(iv_dir, sizeof(iv_dir), "%s/.iv", dirname(fpcpy1));
+
+    // Check if the .iv directory exists, create it if not
+    struct stat st;
+    if (stat(iv_dir, &st) == -1) {
+        if (mkdir(iv_dir, 0755) == -1) {
+            fprintf(stderr, "Error creating .iv directory\n");
+            free(fpcpy1);
+            free(fpcpy2);
+            return -errno;
+        }
+    }
+
+    // Construct the IV file path inside .iv directory
+    snprintf(iv_path, sizeof(iv_path), "%s/.%s", iv_dir, basename(fpcpy2));
+
+    // Create and open the IV file
+    int fd = open(iv_path, O_CREAT | O_WRONLY, 0644);
+    if (fd == -1) {
+        fprintf(stderr, "Error creating IV file: %s\n", iv_path);
+        free(fpcpy1);
+        free(fpcpy2);
+        return -errno;
+    }
+
+    // Write the IV to the file
+    if (write(fd, iv, AES_BLOCK_SIZE) == -1) {
+        fprintf(stderr, "Error writing IV to file: %s\n", iv_path);
+        free(fpcpy1);
+        free(fpcpy2);
+        return -errno;
+    }
+
+    fd = close(fd);
+    free(fpcpy1);
+    free(fpcpy2);
 
     return 0;
 }
@@ -890,51 +962,6 @@ static int xmp_fsync(const char *path, int isdatasync,
     return 0;
 }
 
-#ifdef HAVE_SETXATTR
-/* xattr operations are optional and can safely be left unimplemented */
-static int xmp_setxattr(const char *path, const char *name, const char *value,
-                        size_t size, int flags)
-{
-    char fpath[PATH_MAX];
-    full_path(fpath, path);
-    int res = lsetxattr(fpath, name, value, size, flags);
-    if (res == -1)
-        return -errno;
-    return 0;
-}
-
-static int xmp_getxattr(const char *path, const char *name, char *value,
-                    size_t size)
-{
-    char fpath[PATH_MAX];
-    full_path(fpath, path);
-    int res = lgetxattr(fpath, name, value, size);
-    if (res == -1)
-        return -errno;
-    return res;
-}
-
-static int xmp_listxattr(const char *path, char *list, size_t size)
-{
-    char fpath[PATH_MAX];
-    full_path(fpath, path);
-    int res = llistxattr(fpath, list, size);
-    if (res == -1)
-        return -errno;
-    return res;
-}
-
-static int xmp_removexattr(const char *path, const char *name)
-{
-    char fpath[PATH_MAX];
-    full_path(fpath, path);
-    int res = lremovexattr(fpath, name);
-    if (res == -1)
-        return -errno;
-    return 0;
-}
-#endif /* HAVE_SETXATTR */ 
-
 static struct fuse_operations xmp_oper = {
     .getattr	= xmp_getattr,
     .access	= xmp_access,
@@ -957,12 +984,6 @@ static struct fuse_operations xmp_oper = {
     .statfs	= xmp_statfs,
     .release	= xmp_release,
     .fsync	= xmp_fsync,
-#ifdef HAVE_SETXATTR
-    .setxattr	= xmp_setxattr,
-    .getxattr	= xmp_getxattr,
-    .listxattr	= xmp_listxattr,
-    .removexattr= xmp_removexattr,
-#endif
 };
 
 int main(int argc, char *argv[])
