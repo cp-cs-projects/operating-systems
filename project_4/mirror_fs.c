@@ -165,7 +165,7 @@ int decrypt_file(unsigned char *ciphertext, off_t file_size, unsigned char iv[AE
         free(plaintext);
         return -EIO;
     }
-    plaintext_len = len;
+    plaintext_len = len; 
 
     if (1 != EVP_DecryptFinal_ex(ctx, plaintext + len, &len)) {
         fprintf(stderr, "Error finalizing the decryption in read\n");
