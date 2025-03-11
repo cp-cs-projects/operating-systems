@@ -142,7 +142,7 @@ int decrypt_file(unsigned char *ciphertext, off_t file_size, unsigned char iv[AE
         return -EIO;
     }
 
-    unsigned char *plaintext = malloc(file_size);  // is it safe to assume encrypted file size is >= plaintext file size?
+    unsigned char *plaintext = calloc(file_size, sizeof(unsigned char));  // is it safe to assume encrypted file size is >= plaintext file size?
     if (!plaintext) {
         fprintf(stderr, "Memory allocation error in read\n");
         EVP_CIPHER_CTX_free(ctx);
@@ -177,9 +177,14 @@ int decrypt_file(unsigned char *ciphertext, off_t file_size, unsigned char iv[AE
     free(ciphertext);
     printf("IM IN DECRYPT\n\n\n this is plaintext len: %d\n this is len %d\n", plaintext_len, len);
     plaintext_len += len;
+    printf("About to memcpy...\n");
     memcpy(buf, plaintext, plaintext_len);
+    printf("BUF strlen after: %d\n", strlen(buf));
+    printf("BUF: %s\n", buf);
+    printf("MEMCPY complete");
     free(plaintext);
     EVP_CIPHER_CTX_free(ctx);
+    printf("Completed decrypt!\n");
     return plaintext_len;
 }
 
@@ -634,16 +639,6 @@ static int xmp_truncate(const char *path, off_t size)
     }
 
     printf("\n\n\n\n\n\n HITTING TRUNCATE \n\n\n\n\n\n");
-
-    // if(size > plaintext_len) // append/increase
-    // {
-
-    // }
-    // else if(size < plaintext_len) // slice
-    // {
-
-    // }
-    // else {return 0;}
     int fd;
     off_t file_size;
     int plaintext_len;
@@ -704,9 +699,8 @@ static int xmp_truncate(const char *path, off_t size)
     char *new_text = NULL;
     if (offset < size) {
         // expanding file
-        new_text = calloc(size, sizeof(unsigned char));
+        new_text = calloc(size + 1, sizeof(unsigned char));
         if (!new_text) {
-            free(ciphertext);
             free(plaintext);
             close(fd);
             return -ENOMEM;
@@ -721,10 +715,8 @@ static int xmp_truncate(const char *path, off_t size)
         // leaving as the same size...
         new_text = plaintext;
     }
+    printf("New Text: %s\n", new_text);
 
-    // printf("\n\nthis is the old plaintext: %s \n this is the buf: %s\n this is the size: %d\n this is the offset: %d\n this is the plaintext len: %d\n", plaintext, buf, size, offset, plaintext_len);
-    // memcpy(plaintext + offset, buf, size); // this is where something is going wrong
-    // printf("\n\nthis is the new plaintext: %s \n this is the buf: %s\n this is the size: %d\n this is the offset: %d\n this is the plaintext len: %d\n", plaintext, buf, size, offset, plaintext_len);
     
     /*now encrypt back*/
     unsigned char* new_ciphertext = calloc(size + AES_BLOCK_SIZE, sizeof(unsigned char)); //account for padding
@@ -735,6 +727,8 @@ static int xmp_truncate(const char *path, off_t size)
     }
 
     int ciphertext_len = encrypt_file((unsigned char *)new_text, new_ciphertext, iv, size);
+    printf("Encrypt done!\n");
+    printf("New cipher: %s\n", new_ciphertext);
 
     if (ciphertext_len < 0) {
         fprintf(stderr, "Encryption error in write\n");
@@ -744,7 +738,9 @@ static int xmp_truncate(const char *path, off_t size)
         return -EIO;
     }
     free(plaintext); // We don't need plaintext anymore
-    free(new_text);
+    if (offset < size) {
+        free(new_text);
+    }
 
     /* Write encrypted data back to file */
     if (ftruncate(fd, ciphertext_len) == -1) {
