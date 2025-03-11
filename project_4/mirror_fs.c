@@ -644,7 +644,120 @@ static int xmp_truncate(const char *path, off_t size)
 
     // }
     // else {return 0;}
+    int fd;
+    off_t file_size;
+    int plaintext_len;
 
+    fd = open(fpath, O_RDWR);
+    if (fd == -1)
+        return -errno;
+    /*else we need to decrypt and then trunc/append and then ecrypt again*/
+    //decrypt
+    unsigned char iv[AES_BLOCK_SIZE]; // find the iv file
+    int iv_fd = open(iv_path, O_RDONLY);
+    if (iv_fd == -1) {
+        fprintf(stderr, "Error opening IV file: %s\n", iv_path);
+        close(fd);
+        return -errno;
+    }
+    if (read(iv_fd, iv, AES_BLOCK_SIZE) != AES_BLOCK_SIZE) { // try to read the IV
+        fprintf(stderr, "Error reading IV from file: %s\n", iv_path);
+        close(fd);
+        close(iv_fd);
+        return -EIO;
+    }
+    iv_fd = close(iv_fd);
+
+    /* now let's read the entire encrypted data */
+    file_size = lseek(fd, 0, SEEK_END); // get the encrypted file size
+    lseek(fd, 0, SEEK_SET);
+
+    unsigned char *ciphertext = calloc(file_size, sizeof(unsigned char));
+    if (!ciphertext) {
+        close(fd);
+        return -ENOMEM;
+    }
+
+    off_t bytes_read = pread(fd, ciphertext, file_size, 0); //read ciphertext
+    //fprintf(stderr, "\n\nREAD PART OF WRITE fd = %d file_size = %d bytes read %d\n\n\n", fd, (int)file_size, (int)bytes_read);
+    
+    if (bytes_read != file_size) { // read entire encrypted data
+        //fprintf(stderr, "\n\nERRORING IN READ PART OF WRITE  error number %d fd = %d cipher text = %s file_size = %d bytes read %d\n\n\n", -errno, fd, ciphertext, (int)file_size, (int)bytes_read);
+        free(ciphertext);
+        fd = close(fd);
+        return -EIO;
+    }
+    char* plaintext = calloc(file_size + size, sizeof(unsigned char));
+    if (!plaintext) {
+        free(ciphertext);
+        close(fd);
+        return -ENOMEM;
+    }
+
+    res = decrypt_file(ciphertext, file_size, iv, plaintext); //res holds the plaintext file len, buf contains the plaintext
+    plaintext_len = res; //Actual decrypted size
+    int offset = strlen(plaintext); 
+    
+
+    printf("Attempting to write %zu bytes to %s at offset %ld\n", size, path, offset);
+
+    char *new_text = NULL;
+    if (offset < size) {
+        // expanding file
+        new_text = calloc(size, sizeof(unsigned char));
+        if (!new_text) {
+            free(ciphertext);
+            free(plaintext);
+            close(fd);
+            return -ENOMEM;
+        }
+        memcpy(new_text, plaintext, offset);
+
+    } else if (offset > size) {
+        // truncating file
+        new_text = plaintext;
+        new_text[size] = '\0'; // terminate the string
+    } else {
+        // leaving as the same size...
+        new_text = plaintext;
+    }
+
+    // printf("\n\nthis is the old plaintext: %s \n this is the buf: %s\n this is the size: %d\n this is the offset: %d\n this is the plaintext len: %d\n", plaintext, buf, size, offset, plaintext_len);
+    // memcpy(plaintext + offset, buf, size); // this is where something is going wrong
+    // printf("\n\nthis is the new plaintext: %s \n this is the buf: %s\n this is the size: %d\n this is the offset: %d\n this is the plaintext len: %d\n", plaintext, buf, size, offset, plaintext_len);
+    
+    /*now encrypt back*/
+    unsigned char* new_ciphertext = calloc(size + AES_BLOCK_SIZE, sizeof(unsigned char)); //account for padding
+    if (!new_ciphertext) {
+        free(plaintext);
+        close(fd);
+        return -ENOMEM;
+    }
+
+    int ciphertext_len = encrypt_file((unsigned char *)new_text, new_ciphertext, iv, size);
+
+    if (ciphertext_len < 0) {
+        fprintf(stderr, "Encryption error in write\n");
+        free(plaintext);
+        free(new_ciphertext);
+        close(fd);
+        return -EIO;
+    }
+    free(plaintext); // We don't need plaintext anymore
+    free(new_text);
+
+    /* Write encrypted data back to file */
+    if (ftruncate(fd, ciphertext_len) == -1) {
+        fprintf(stderr, "Error truncating file\n");
+    }
+
+    ssize_t bytes_written = pwrite(fd, new_ciphertext, ciphertext_len, 0);
+    if (bytes_written != ciphertext_len) {
+        fprintf(stderr, "\n\nERROR: Expected to write %d bytes, but wrote %ld\n\n", ciphertext_len, bytes_written);
+    }
+    printf("plaintext_len: %d, ciphertext_len: %d\n", plaintext_len, ciphertext_len);
+    free(new_ciphertext);
+    close(fd);
     return 0;
 }
 
