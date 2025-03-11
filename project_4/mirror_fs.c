@@ -142,7 +142,7 @@ int decrypt_file(unsigned char *ciphertext, off_t file_size, unsigned char iv[AE
         return -EIO;
     }
 
-    unsigned char *plaintext = malloc(file_size);  // is it safe to assume encrypted file size is >= plaintext file size?
+    unsigned char *plaintext = calloc(file_size, sizeof(unsigned char));  // is it safe to assume encrypted file size is >= plaintext file size?
     if (!plaintext) {
         fprintf(stderr, "Memory allocation error in read\n");
         EVP_CIPHER_CTX_free(ctx);
@@ -177,9 +177,14 @@ int decrypt_file(unsigned char *ciphertext, off_t file_size, unsigned char iv[AE
     free(ciphertext);
     printf("IM IN DECRYPT\n\n\n this is plaintext len: %d\n this is len %d\n", plaintext_len, len);
     plaintext_len += len;
+    printf("About to memcpy...\n");
     memcpy(buf, plaintext, plaintext_len);
+    printf("BUF strlen after: %d\n", strlen(buf));
+    printf("BUF: %s\n", buf);
+    printf("MEMCPY complete");
     free(plaintext);
     EVP_CIPHER_CTX_free(ctx);
+    printf("Completed decrypt!\n");
     return plaintext_len;
 }
 
@@ -634,17 +639,121 @@ static int xmp_truncate(const char *path, off_t size)
     }
 
     printf("\n\n\n\n\n\n HITTING TRUNCATE \n\n\n\n\n\n");
+    int fd;
+    off_t file_size;
+    int plaintext_len;
 
-    // if(size > plaintext_len) // append/increase
-    // {
+    fd = open(fpath, O_RDWR);
+    if (fd == -1)
+        return -errno;
+    /*else we need to decrypt and then trunc/append and then ecrypt again*/
+    //decrypt
+    unsigned char iv[AES_BLOCK_SIZE]; // find the iv file
+    int iv_fd = open(iv_path, O_RDONLY);
+    if (iv_fd == -1) {
+        fprintf(stderr, "Error opening IV file: %s\n", iv_path);
+        close(fd);
+        return -errno;
+    }
+    if (read(iv_fd, iv, AES_BLOCK_SIZE) != AES_BLOCK_SIZE) { // try to read the IV
+        fprintf(stderr, "Error reading IV from file: %s\n", iv_path);
+        close(fd);
+        close(iv_fd);
+        return -EIO;
+    }
+    iv_fd = close(iv_fd);
 
-    // }
-    // else if(size < plaintext_len) // slice
-    // {
+    /* now let's read the entire encrypted data */
+    file_size = lseek(fd, 0, SEEK_END); // get the encrypted file size
+    lseek(fd, 0, SEEK_SET);
 
-    // }
-    // else {return 0;}
+    unsigned char *ciphertext = calloc(file_size, sizeof(unsigned char));
+    if (!ciphertext) {
+        close(fd);
+        return -ENOMEM;
+    }
 
+    off_t bytes_read = pread(fd, ciphertext, file_size, 0); //read ciphertext
+    //fprintf(stderr, "\n\nREAD PART OF WRITE fd = %d file_size = %d bytes read %d\n\n\n", fd, (int)file_size, (int)bytes_read);
+    
+    if (bytes_read != file_size) { // read entire encrypted data
+        //fprintf(stderr, "\n\nERRORING IN READ PART OF WRITE  error number %d fd = %d cipher text = %s file_size = %d bytes read %d\n\n\n", -errno, fd, ciphertext, (int)file_size, (int)bytes_read);
+        free(ciphertext);
+        fd = close(fd);
+        return -EIO;
+    }
+    char* plaintext = calloc(file_size + size, sizeof(unsigned char));
+    if (!plaintext) {
+        free(ciphertext);
+        close(fd);
+        return -ENOMEM;
+    }
+
+    res = decrypt_file(ciphertext, file_size, iv, plaintext); //res holds the plaintext file len, buf contains the plaintext
+    plaintext_len = res; //Actual decrypted size
+    int offset = strlen(plaintext); 
+    
+
+    printf("Attempting to write %zu bytes to %s at offset %ld\n", size, path, offset);
+
+    char *new_text = NULL;
+    if (offset < size) {
+        // expanding file
+        new_text = calloc(size + 1, sizeof(unsigned char));
+        if (!new_text) {
+            free(plaintext);
+            close(fd);
+            return -ENOMEM;
+        }
+        memcpy(new_text, plaintext, offset);
+
+    } else if (offset > size) {
+        // truncating file
+        new_text = plaintext;
+        new_text[size] = '\0'; // terminate the string
+    } else {
+        // leaving as the same size...
+        new_text = plaintext;
+    }
+    printf("New Text: %s\n", new_text);
+
+    
+    /*now encrypt back*/
+    unsigned char* new_ciphertext = calloc(size + AES_BLOCK_SIZE, sizeof(unsigned char)); //account for padding
+    if (!new_ciphertext) {
+        free(plaintext);
+        close(fd);
+        return -ENOMEM;
+    }
+
+    int ciphertext_len = encrypt_file((unsigned char *)new_text, new_ciphertext, iv, size);
+    printf("Encrypt done!\n");
+    printf("New cipher: %s\n", new_ciphertext);
+
+    if (ciphertext_len < 0) {
+        fprintf(stderr, "Encryption error in write\n");
+        free(plaintext);
+        free(new_ciphertext);
+        close(fd);
+        return -EIO;
+    }
+    free(plaintext); // We don't need plaintext anymore
+    if (offset < size) {
+        free(new_text);
+    }
+
+    /* Write encrypted data back to file */
+    if (ftruncate(fd, ciphertext_len) == -1) {
+        fprintf(stderr, "Error truncating file\n");
+    }
+
+    ssize_t bytes_written = pwrite(fd, new_ciphertext, ciphertext_len, 0);
+    if (bytes_written != ciphertext_len) {
+        fprintf(stderr, "\n\nERROR: Expected to write %d bytes, but wrote %ld\n\n", ciphertext_len, bytes_written);
+    }
+    printf("plaintext_len: %d, ciphertext_len: %d\n", plaintext_len, ciphertext_len);
+    free(new_ciphertext);
+    close(fd);
     return 0;
 }
 
