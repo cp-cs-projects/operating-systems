@@ -39,6 +39,7 @@
 
 
 struct xmp_context {
+    char *mount_dir;
     char *mirror_dir;
     char *passphrase;
     unsigned char *enc_key;
@@ -57,7 +58,6 @@ const int log_op(const char *string) {
 
 static void full_path(char fpath[PATH_MAX], const char *path) {
     char adj_path[PATH_MAX];
-
     // Check if 'from' already starts with '/' to avoid double slashes
     if (path[0] != '/') {
         snprintf(adj_path, sizeof(adj_path), "/%s", path); // Prepend '/'; for some reason this is needed...
@@ -66,6 +66,20 @@ static void full_path(char fpath[PATH_MAX], const char *path) {
     }
     strcpy(fpath, CTX_DATA->mirror_dir);
     strncat(fpath, adj_path, PATH_MAX);
+}
+
+static void full_path_sym(char fpath[PATH_MAX], const char *path) {
+    char adj_path[PATH_MAX];
+    // Check if 'from' already starts with '/' to avoid double slashes
+    if (path[0] != '/') {
+        snprintf(adj_path, sizeof(adj_path), "/%s", path); // Prepend '/'; for some reason this is needed...
+    } else {
+        snprintf(adj_path, sizeof(adj_path), "%s", path);
+    }
+    strcpy(fpath, CTX_DATA->mount_dir);
+    printf("AFTER STRCPY: %s\n", fpath);
+    strncat(fpath, adj_path, PATH_MAX);
+    printf("AFTER STR CAT: %s\n", fpath);
 }
 
 static void create_encryption_key(const char *passphrase, unsigned char key[KEY_SIZE]) {
@@ -452,16 +466,20 @@ static int xmp_symlink(const char *from, const char *to)
     int res;
     char fpath_from[PATH_MAX];
     char fpath_to[PATH_MAX];
+    char temp_to[PATH_MAX];
     full_path(fpath_from, from);
-    full_path(fpath_to, to);
+    //full_path(fpath_to, to);
+    full_path_sym(fpath_to, to);
+    printf("THIS IS CTX DATA %s\n", CTX_DATA -> mount_dir);
+    printf("CREATING SYMLINK FROM %s TO %s\n\n", from, fpath_to);
+    
 
-
-    res = symlink(fpath_from, fpath_to);
+    //res = symlink(from, fpath_to); // COMMENT THIS LINE TO KEEP FROM BREAKING THE SERVER
     if (res == -1)
         return -errno;
 
     // what to do about .iv file???
-    // create own or create one with a link to the original?
+    // create own or create one with a link to the original? 
 
     return 0;
 }
@@ -1117,6 +1135,7 @@ int main(int argc, char *argv[])
     char passphrase[256];
     char cwd[PATH_MAX];
     char mirror_dir[PATH_MAX];
+    char mount_dir[PATH_MAX];
     struct xmp_context *ctx = malloc(sizeof(struct xmp_context));
     if (!ctx) {
         fprintf(stderr, "Error: malloc failed\n");
@@ -1140,6 +1159,9 @@ int main(int argc, char *argv[])
     // Set mirror path
     snprintf(mirror_dir, sizeof(mirror_dir), "%s/%s", cwd, argv[i + 1]);
     ctx->mirror_dir = mirror_dir;
+
+    snprintf(mount_dir, sizeof(mount_dir), "%s/%s", cwd, argv[i]);
+    ctx->mount_dir = mount_dir;
 
     // Adjust argc to pass to fuse_main
     argc--;
