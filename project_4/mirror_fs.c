@@ -69,17 +69,42 @@ static void full_path(char fpath[PATH_MAX], const char *path) {
 }
 
 static void full_path_sym(char fpath[PATH_MAX], const char *path) {
+
     char adj_path[PATH_MAX];
-    // Check if 'from' already starts with '/' to avoid double slashes
-    if (path[0] != '/') {
-        snprintf(adj_path, sizeof(adj_path), "/%s", path); // Prepend '/'; for some reason this is needed...
-    } else {
-        snprintf(adj_path, sizeof(adj_path), "%s", path);
+    
+    printf("SOURCE DIR: %s\n", CTX_DATA->mirror_dir);
+    
+    //remove last slash if it exists
+    
+    if (CTX_DATA->mirror_dir[strlen(CTX_DATA->mirror_dir) - 1] == '/') {
+    
+    CTX_DATA->mirror_dir[strlen(CTX_DATA->mirror_dir) - 1] = '\0';
+    
     }
-    strcpy(fpath, CTX_DATA->mount_dir);
+    
+    printf("SOURCE DIR AFTER MANGLING: %s\n", CTX_DATA->mirror_dir);
+    
+    
+    // Check if 'from' already starts with '/' to avoid double slashes
+    
+    if (path[0] != '/') {
+    
+    snprintf(adj_path, sizeof(adj_path), "/%s", path); // Prepend '/'; for some reason this is needed...
+    
+    } else {
+    
+    snprintf(adj_path, sizeof(adj_path), "%s", path);
+    
+    }
+    
+    strcpy(fpath, CTX_DATA->mirror_dir);
+    
     printf("AFTER STRCPY: %s\n", fpath);
+    
     strncat(fpath, adj_path, PATH_MAX);
+    
     printf("AFTER STR CAT: %s\n", fpath);
+    
 }
 
 static void create_encryption_key(const char *passphrase, unsigned char key[KEY_SIZE]) {
@@ -474,7 +499,7 @@ static int xmp_symlink(const char *from, const char *to)
     printf("CREATING SYMLINK FROM %s TO %s\n\n", from, fpath_to);
     
 
-    //res = symlink(from, fpath_to); // COMMENT THIS LINE TO KEEP FROM BREAKING THE SERVER
+    res = symlink(from, fpath_to); // COMMENT THIS LINE TO KEEP FROM BREAKING THE SERVER
     if (res == -1)
         return -errno;
 
