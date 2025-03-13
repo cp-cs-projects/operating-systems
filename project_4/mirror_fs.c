@@ -57,11 +57,6 @@ const int log_op(const char *string) {
 }
 
 static void full_path(char fpath[PATH_MAX], const char *path) {
-    if (strncmp(path, "/home", 5) == 0) {  // check if path is already absolute
-        strcpy(fpath, path);
-        return;
-    }
-	
     char adj_path[PATH_MAX];
     // Check if 'from' already starts with '/' to avoid double slashes
     if (path[0] != '/') {
@@ -74,10 +69,6 @@ static void full_path(char fpath[PATH_MAX], const char *path) {
 }
 
 static void full_path_sym(char fpath[PATH_MAX], const char *path) {
-    if (strncmp(path, "/home", 5) == 0) {  // check if path is already absolute
-        strcpy(fpath, path);
-        return;
-    }
 
     char adj_path[PATH_MAX];
     
@@ -227,7 +218,7 @@ int decrypt_file(unsigned char *ciphertext, off_t file_size, unsigned char iv[AE
     plaintext_len += len;
     printf("About to memcpy...\n");
     memcpy(buf, plaintext, plaintext_len);
-    printf("BUF strlen after: %d\n", strlen(buf));
+    //printf("BUF strlen after: %d\n", strlen(buf));
     printf("BUF: %s\n", buf);
     printf("MEMCPY complete");
     free(plaintext);
@@ -344,7 +335,7 @@ static int xmp_mknod(const char *path, mode_t mode, dev_t rdev)
 
             memset(plaintext, 0, AES_BLOCK_SIZE); 
 
-            ciphertext_len = encrypt_file(plaintext, ciphertext, iv, strlen(plaintext));
+            ciphertext_len = encrypt_file(plaintext, ciphertext, iv, (unsigned int)strlen((const char *)plaintext));
 
             if (ciphertext_len < 0) { // check that encryption went ok
                 fprintf(stderr, "Encryption error\n");
@@ -500,7 +491,7 @@ static int xmp_symlink(const char *from, const char *to)
     int res;
     char fpath_from[PATH_MAX];
     char fpath_to[PATH_MAX];
-    char temp_to[PATH_MAX];
+    //char temp_to[PATH_MAX];
     full_path(fpath_from, from);
     //full_path(fpath_to, to);
     full_path_sym(fpath_to, to);
@@ -569,26 +560,9 @@ static int xmp_link(const char *from, const char *to)
     full_path(fpath_from, from);
     full_path(fpath_to, to);
 
-    printf("From: %s\nTo: %s\n", fpath_from, fpath_to);
     res = link(fpath_from, fpath_to);
     if (res == -1)
         return -errno;
-
-    /* Get .iv path for from */
-    char iv_dir_from[PATH_MAX];
-    char iv_path_from[PATH_MAX];
-    char *fpcpy1_from = strdup(fpath_from);
-    char *fpcpy2_from = strdup(fpath_from);
-    if (!fpcpy1_from || !fpcpy2_from) {
-        fprintf(stderr, "Memory allocation error\n");
-        return -ENOMEM;
-    }
-
-    // Extract parent directory of fpath
-    snprintf(iv_dir_from, sizeof(iv_dir_from), "%s/.iv", dirname(fpcpy1_from));
-
-    // Construct the IV file path inside .iv directory
-    snprintf(iv_path_from, sizeof(iv_path_from), "%s/.%s", iv_dir_from, basename(fpcpy2_from));
 
     /* look for .iv dir */
     char iv_dir[PATH_MAX];
@@ -600,6 +574,12 @@ static int xmp_link(const char *from, const char *to)
         return -ENOMEM;
     }
 
+    /* Generate a random IV */
+    unsigned char iv[AES_BLOCK_SIZE];
+    if (!RAND_bytes(iv, AES_BLOCK_SIZE)) {
+        fprintf(stderr, "Error generating IV\n");
+        return -EIO;  // Return I/O error if IV generation fails
+    }
 
     // Extract parent directory of fpath
     snprintf(iv_dir, sizeof(iv_dir), "%s/.iv", dirname(fpcpy1));
@@ -618,16 +598,26 @@ static int xmp_link(const char *from, const char *to)
     // Construct the IV file path inside .iv directory
     snprintf(iv_path, sizeof(iv_path), "%s/.%s", iv_dir, basename(fpcpy2));
 
-    printf("IV From: %s\nIV To: %s\n", iv_path_from, iv_path);
-    // link IV file from to
-    res = link(iv_path_from, iv_path);
-    if (res == -1)
+    // Create and open the IV file
+    int fd = open(iv_path, O_CREAT | O_WRONLY, 0644);
+    if (fd == -1) {
+        fprintf(stderr, "Error creating IV file: %s\n", iv_path);
+        free(fpcpy1);
+        free(fpcpy2);
         return -errno;
+    }
 
+    // Write the IV to the file
+    if (write(fd, iv, AES_BLOCK_SIZE) == -1) {
+        fprintf(stderr, "Error writing IV to file: %s\n", iv_path);
+        free(fpcpy1);
+        free(fpcpy2);
+        return -errno;
+    }
+    
+    fd = close(fd);
     free(fpcpy1);
     free(fpcpy2);
-    free(fpcpy1_from);
-    free(fpcpy2_from);
 
     return 0;
 }
@@ -747,7 +737,7 @@ static int xmp_truncate(const char *path, off_t size)
     int offset = strlen(plaintext); 
     
 
-    printf("Attempting to write %zu bytes to %s at offset %ld\n", size, path, offset);
+    //printf("Attempting to write %zu bytes to %s at offset %ld\n", size, path, offset);
 
     char *new_text = NULL;
     if (offset < size) {
@@ -1062,9 +1052,9 @@ static int xmp_write(const char *path, const char *buf, size_t size,
         close(fd);
         return -ENOMEM;
     }
-    printf("\n\nthis is the old plaintext: %s \n this is the buf: %s\n this is the size: %d\n this is the offset: %d\n this is the plaintext len: %d\n", plaintext, buf, size, offset, plaintext_len);
+    //printf("\n\nthis is the old plaintext: %s \n this is the buf: %s\n this is the size: %d\n this is the offset: %d\n this is the plaintext len: %d\n", plaintext, buf, size, offset, plaintext_len);
     memcpy(plaintext + offset, buf, size); // this is where something is going wrong
-    printf("\n\nthis is the new plaintext: %s \n this is the buf: %s\n this is the size: %d\n this is the offset: %d\n this is the plaintext len: %d\n", plaintext, buf, size, offset, plaintext_len);
+    //printf("\n\nthis is the new plaintext: %s \n this is the buf: %s\n this is the size: %d\n this is the offset: %d\n this is the plaintext len: %d\n", plaintext, buf, size, offset, plaintext_len);
     
     /*now encrypt back*/
     unsigned char* new_ciphertext = malloc(plaintext_len + AES_BLOCK_SIZE); //account for padding
