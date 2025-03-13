@@ -946,6 +946,7 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
     return res;
 }
 
+// write to file
 static int xmp_write(const char *path, const char *buf, size_t size,
                      off_t offset, struct fuse_file_info *fi)
 {
@@ -960,7 +961,6 @@ static int xmp_write(const char *path, const char *buf, size_t size,
     (void) fi;
 
     /* look for .iv dir and file to see if the file is encrypted*/
-    //char iv_dir[PATH_MAX];
     char iv_path[PATH_MAX];
     char *fpcpy1 = strdup(fpath);
     char *fpcpy2 = strdup(fpath);
@@ -973,6 +973,7 @@ static int xmp_write(const char *path, const char *buf, size_t size,
     free(fpcpy1);
     free(fpcpy2);
 
+    // check for .iv file
     struct stat st;
     int encrypted = (stat(iv_path, &st) == 0);
 
@@ -987,7 +988,7 @@ static int xmp_write(const char *path, const char *buf, size_t size,
         fd = close(fd);
         return res;
     }
-    printf("\n\n\n\n\n\n\n\n\n GOT HERE WRITING %d \n\n\n\n\n\n\n", encrypted);
+
     /*else we need to decrypt and then append and then ecrypt again*/
     //decrypt
     unsigned char iv[AES_BLOCK_SIZE]; // find the iv file
@@ -1009,21 +1010,23 @@ static int xmp_write(const char *path, const char *buf, size_t size,
     file_size = lseek(fd, 0, SEEK_END); // get the encrypted file size
     lseek(fd, 0, SEEK_SET);
 
+    // allocate memory for ciphertext
     unsigned char *ciphertext = calloc(file_size, sizeof(unsigned char));
     if (!ciphertext) {
         close(fd);
         return -ENOMEM;
     }
 
+    // read ciphertext from file
     off_t bytes_read = pread(fd, ciphertext, file_size, 0); //read ciphertext
-    //fprintf(stderr, "\n\nREAD PART OF WRITE fd = %d file_size = %d bytes read %d\n\n\n", fd, (int)file_size, (int)bytes_read);
     
     if (bytes_read != file_size) { // read entire encrypted data
-        //fprintf(stderr, "\n\nERRORING IN READ PART OF WRITE  error number %d fd = %d cipher text = %s file_size = %d bytes read %d\n\n\n", -errno, fd, ciphertext, (int)file_size, (int)bytes_read);
         free(ciphertext);
         fd = close(fd);
         return -EIO;
     }
+
+    // allocated mem for plaintext
     char* plaintext = calloc(file_size + size, sizeof(unsigned char));
     if (!plaintext) {
         free(ciphertext);
@@ -1031,39 +1034,28 @@ static int xmp_write(const char *path, const char *buf, size_t size,
         return -ENOMEM;
     }
 
+    // decrypt the file to plaintext
     res = decrypt_file(ciphertext, file_size, iv, plaintext); //res holds the plaintext file len, buf contains the plaintext
     plaintext_len = res; //Actual decrypted size
     offset = strlen(plaintext); 
     
-
     printf("Attempting to write %zu bytes to %s at offset %ld\n", size, path, offset);
-
-    /* if new data is bigger than plaintext size, need to expand */
-
-    // if (plaintext_len == 0) { 
-    //     printf("DO I EVER GET HERE?? Empty file detected in write. Initializing to 16 bytes of zeros.\n");
-    //     plaintext_len = offset + size; 
-    //     plaintext = realloc(plaintext, plaintext_len);
-    //     if (!plaintext) {
-    //         close(fd);
-    //         return -ENOMEM;
-    //     }
-    //     memset(plaintext, 0, plaintext_len);
-    // }
 
     /* Expand plaintext size if new data requires more space */
     if (offset + size > plaintext_len) {
         plaintext_len = offset + size; //here
     }
 
+    // realloc plaintext to new size
     plaintext = realloc(plaintext, plaintext_len);
-
     if (!plaintext) {
         close(fd);
         return -ENOMEM;
     }
+    
+    // add new data to plaintext
     printf("\n\nthis is the old plaintext: %s \n this is the buf: %s\n this is the size: %d\n this is the offset: %d\n this is the plaintext len: %d\n", plaintext, buf, size, offset, plaintext_len);
-    memcpy(plaintext + offset, buf, size); // this is where something is going wrong
+    memcpy(plaintext + offset, buf, size);
     printf("\n\nthis is the new plaintext: %s \n this is the buf: %s\n this is the size: %d\n this is the offset: %d\n this is the plaintext len: %d\n", plaintext, buf, size, offset, plaintext_len);
     
     /*now encrypt back*/
@@ -1074,6 +1066,7 @@ static int xmp_write(const char *path, const char *buf, size_t size,
         return -ENOMEM;
     }
 
+    // encrypt plantext to ciphertext
     int ciphertext_len = encrypt_file((unsigned char *)plaintext, new_ciphertext, iv, strlen(plaintext));
 
     if (ciphertext_len < 0) {
@@ -1085,18 +1078,20 @@ static int xmp_write(const char *path, const char *buf, size_t size,
     }
     free(plaintext); // We don't need plaintext anymore
 
-    /* Write encrypted data back to file */
+    /* truncate file to correct length */
     if (ftruncate(fd, ciphertext_len) == -1) {
         fprintf(stderr, "Error truncating file\n");
     }
 
+    // write the new ciphertext to the file
     ssize_t bytes_written = pwrite(fd, new_ciphertext, ciphertext_len, 0);
     if (bytes_written != ciphertext_len) {
         fprintf(stderr, "\n\nERROR: Expected to write %d bytes, but wrote %ld\n\n", ciphertext_len, bytes_written);
     }
+
     printf("plaintext_len: %d, ciphertext_len: %d\n", plaintext_len, ciphertext_len);
-    free(new_ciphertext);
-    close(fd);
+    free(new_ciphertext); // free mallocd stuff
+    close(fd); // close file descriptor
     return size;
 }
 
