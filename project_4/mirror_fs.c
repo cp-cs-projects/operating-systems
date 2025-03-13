@@ -57,6 +57,11 @@ const int log_op(const char *string) {
 }
 
 static void full_path(char fpath[PATH_MAX], const char *path) {
+    if (strncmp(path, "/home", 5) == 0) {  // check if path is already absolute
+         strcpy(fpath, path);
+         return;
+     }
+	
     char adj_path[PATH_MAX];
     // Check if 'from' already starts with '/' to avoid double slashes
     if (path[0] != '/') {
@@ -69,7 +74,11 @@ static void full_path(char fpath[PATH_MAX], const char *path) {
 }
 
 static void full_path_sym(char fpath[PATH_MAX], const char *path) {
-
+    if (strncmp(path, "/home", 5) == 0) {  // check if path is already absolute
+         strcpy(fpath, path);
+         return;
+     }
+	
     char adj_path[PATH_MAX];
     
     printf("SOURCE DIR: %s\n", CTX_DATA->mirror_dir);
