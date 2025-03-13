@@ -560,9 +560,26 @@ static int xmp_link(const char *from, const char *to)
     full_path(fpath_from, from);
     full_path(fpath_to, to);
 
+    printf("From: %s\nTo: %s\n", fpath_from, fpath_to);
     res = link(fpath_from, fpath_to);
     if (res == -1)
         return -errno;
+
+    /* Get .iv path for from */
+    char iv_dir_from[PATH_MAX];
+    char iv_path_from[PATH_MAX];
+    char *fpcpy1_from = strdup(fpath_from);
+    char *fpcpy2_from = strdup(fpath_from);
+    if (!fpcpy1_from || !fpcpy2_from) {
+        fprintf(stderr, "Memory allocation error\n");
+        return -ENOMEM;
+    }
+
+    // Extract parent directory of fpath
+    snprintf(iv_dir_from, sizeof(iv_dir_from), "%s/.iv", dirname(fpcpy1_from));
+
+    // Construct the IV file path inside .iv directory
+    snprintf(iv_path_from, sizeof(iv_path_from), "%s/.%s", iv_dir_from, basename(fpcpy2_from));
 
     /* look for .iv dir */
     char iv_dir[PATH_MAX];
@@ -574,12 +591,6 @@ static int xmp_link(const char *from, const char *to)
         return -ENOMEM;
     }
 
-    /* Generate a random IV */
-    unsigned char iv[AES_BLOCK_SIZE];
-    if (!RAND_bytes(iv, AES_BLOCK_SIZE)) {
-        fprintf(stderr, "Error generating IV\n");
-        return -EIO;  // Return I/O error if IV generation fails
-    }
 
     // Extract parent directory of fpath
     snprintf(iv_dir, sizeof(iv_dir), "%s/.iv", dirname(fpcpy1));
@@ -598,26 +609,16 @@ static int xmp_link(const char *from, const char *to)
     // Construct the IV file path inside .iv directory
     snprintf(iv_path, sizeof(iv_path), "%s/.%s", iv_dir, basename(fpcpy2));
 
-    // Create and open the IV file
-    int fd = open(iv_path, O_CREAT | O_WRONLY, 0644);
-    if (fd == -1) {
-        fprintf(stderr, "Error creating IV file: %s\n", iv_path);
-        free(fpcpy1);
-        free(fpcpy2);
+    printf("IV From: %s\nIV To: %s\n", iv_path_from, iv_path);
+    // link IV file from to
+    res = link(iv_path_from, iv_path);
+    if (res == -1)
         return -errno;
-    }
 
-    // Write the IV to the file
-    if (write(fd, iv, AES_BLOCK_SIZE) == -1) {
-        fprintf(stderr, "Error writing IV to file: %s\n", iv_path);
-        free(fpcpy1);
-        free(fpcpy2);
-        return -errno;
-    }
-    
-    fd = close(fd);
     free(fpcpy1);
     free(fpcpy2);
+    free(fpcpy1_from);
+    free(fpcpy2_from);
 
     return 0;
 }
